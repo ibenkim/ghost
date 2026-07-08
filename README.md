@@ -1,6 +1,8 @@
 # Ghost
 
-A transparent, always-on-top floating AI assistant that lives in the bottom-right corner of your screen. Click the bubble to open a chat panel; press Enter to send a message.
+A transparent, always-on-top floating workflow recorder that lives in the bottom-right corner of your screen. Hover the bubble to configure a recording, capture a workflow across apps, review and edit the learned steps, then run it back.
+
+> This phase ships the full **UI and interaction workflow** driven by mock data. Real screen/input capture and AI (summarization + agent execution) are intentionally stubbed for a later phase.
 
 ## Stack
 
@@ -9,7 +11,7 @@ A transparent, always-on-top floating AI assistant that lives in the bottom-righ
 | Desktop shell | [Electron](https://www.electronjs.org/) |
 | UI | React 18 + TypeScript |
 | Build | [electron-vite](https://electron-vite.org/) |
-| AI | OpenAI (`gpt-4o-mini` by default) |
+| State | React context state machine |
 
 ## Quick start
 
@@ -17,65 +19,86 @@ A transparent, always-on-top floating AI assistant that lives in the bottom-righ
 # 1. Install dependencies
 npm install
 
-# 2. Add your OpenAI key
-cp .env.example .env
-# edit .env and set OPENAI_API_KEY=sk-...
-
-# 3. Run in development
+# 2. Run in development
 npm run dev
 
-# 4. Build for distribution
+# 3. Build for distribution
 npm run build
 ```
+
+> If you develop inside an Electron-based editor terminal (e.g. Cursor/VS Code), it may export `ELECTRON_RUN_AS_NODE=1`, which makes the dev launch crash with `Cannot read properties of undefined (reading 'isPackaged')`. Run with it cleared: `env -u ELECTRON_RUN_AS_NODE npm run dev`.
+
+## State machine
+
+Ghost is an explicit state machine. Each state resizes the floating window and renders a different panel:
+
+```
+idle → hover → recording → organizing → editor → running → summary
+```
+
+| State | UI |
+|---|---|
+| `idle` | Purple floating bubble |
+| `hover` | "Record a workflow" panel (One app / Full screen + narrate) |
+| `recording` | Bubble with elapsed timer; expandable "Watching {app}" log |
+| `organizing` | Transient "Organizing…" chip |
+| `editor` | "Here's what I learned" — editable step list, fix-step prompts |
+| `running` | Live step runner with pause / resume / skip / stop |
+| `summary` | "Here's what I've done" — stopped or done variants |
 
 ## Project structure
 
 ```
 ghost/
-├── .planning/             # Task tracking (todo / in-progress / done)
-│   ├── TODO.md
-│   ├── IN_PROGRESS.md
-│   └── DONE.md
+├── .planning/                 # Task tracking (todo / in-progress / done)
 ├── src/
 │   ├── main/
-│   │   └── index.ts       # Electron main process — creates the transparent BrowserWindow
+│   │   └── index.ts           # Transparent BrowserWindow + window:setBounds IPC
 │   ├── preload/
-│   │   ├── index.ts       # Secure IPC bridge exposed as window.ghostBridge
-│   │   └── index.d.ts     # TypeScript types for the bridge
+│   │   ├── index.ts           # IPC bridge exposed as window.ghostBridge
+│   │   └── index.d.ts
 │   └── renderer/
 │       ├── index.html
 │       └── src/
 │           ├── main.tsx
 │           ├── App.tsx
+│           ├── env.d.ts
+│           ├── state/
+│           │   ├── types.ts             # AppState, Workflow, Step, RunStep…
+│           │   ├── mockData.ts          # sample apps, watch log, steps, summaries
+│           │   └── WorkflowContext.tsx  # state machine + transitions + mock timers
 │           ├── components/
-│           │   └── FloatingWidget.tsx   # Bubble + chat panel
-│           ├── hooks/
-│           │   └── useChat.ts           # Message state & AI calls
+│           │   ├── GhostShell.tsx       # routes state → panel
+│           │   ├── GhostBubble.tsx      # idle / recording bubble + timer
+│           │   ├── ui/                  # SegmentedControl, Toggle, MicIcon
+│           │   └── panels/
+│           │       ├── RecordPanel.tsx
+│           │       ├── WatchingPanel.tsx
+│           │       ├── OrganizingChip.tsx
+│           │       ├── EditorPanel.tsx
+│           │       ├── RunningPanel.tsx
+│           │       └── SummaryPanel.tsx
 │           └── styles/
-│               └── globals.css
-├── .env.example
+│               ├── globals.css          # design tokens + base
+│               └── components.css        # panel styles
 ├── electron.vite.config.ts
 ├── package.json
-├── tsconfig.json
-├── tsconfig.node.json
-└── tsconfig.web.json
+└── tsconfig*.json
 ```
 
 ## How it works
 
-1. **Main process** (`src/main/index.ts`) opens a `frameless`, `transparent`, `alwaysOnTop` `BrowserWindow` sized to just the bubble (64 × 64 px) and pinned to the bottom-right of the primary display.
-2. When the user clicks the bubble, the renderer calls `window.ghostBridge.expand()` via the **preload bridge**, and the main process animates the window to 420 × 600 px.
-3. The chat message is sent to the main process via `window.ghostBridge.chat(messages)`, which calls the OpenAI API and returns the response.
-4. Closing the panel calls `window.ghostBridge.collapse()` to shrink the window back to the bubble.
+1. **Main process** (`src/main/index.ts`) opens a `frameless`, `transparent`, `alwaysOnTop` window pinned to the bottom-right of the primary display.
+2. `WorkflowContext` drives the state machine. On each state change it calls `window.ghostBridge.setBounds(w, h)`, and the main process resizes the window while keeping it anchored bottom-right.
+3. Mock timers simulate the AI: the watch log streams in while recording, "Organizing…" resolves into a learned workflow, and the running state advances steps on an interval.
 
-## Changing the AI provider
+## Deferred (later phase)
 
-Edit `src/main/index.ts` — the `ai:chat` IPC handler — and swap out the OpenAI call for any provider (Anthropic, Ollama, etc.).
+- Real screen + input capture (`desktopCapturer`)
+- AI summarization of recorded workflows
+- Creating and running an agent that performs the steps
+- Provider config, persistence, packaging — see `.planning/TODO.md`
 
 ## Task tracking
 
-See the `.planning/` folder:
-
-- **`TODO.md`** — backlog of features not yet started
-- **`IN_PROGRESS.md`** — active work items
-- **`DONE.md`** — completed / shipped items
+See the `.planning/` folder: `TODO.md` (backlog), `IN_PROGRESS.md` (active), `DONE.md` (shipped).

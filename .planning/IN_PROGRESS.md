@@ -4,14 +4,10 @@ Items actively being worked on right now.
 
 ---
 
-## Project Bootstrap
+Nothing in progress. The Ghost Workflow UI state machine is built — see `DONE.md`.
 
-- [x] Scaffold Electron + React + TypeScript project with electron-vite
-- [x] Create transparent always-on-top floating window (main process)
-- [x] Build collapsible floating bubble widget (renderer)
-- [x] Wire IPC preload bridge between renderer and main process
-- [ ] Integrate first AI provider call (OpenAI chat completions)
-- [ ] Style the chat panel that expands from the bubble
+Next up (from `TODO.md`): polish transitions and, in a later phase, wire real
+capture + AI.
 
 ---
 

@@ -5,8 +5,7 @@ declare global {
   interface Window {
     electron: ElectronAPI
     ghostBridge: {
-      expand: () => Promise<void>
-      collapse: () => Promise<void>
+      setBounds: (w: number, h: number) => Promise<void>
       chat: (messages: ChatMessage[]) => Promise<AiResult>
     }
   }

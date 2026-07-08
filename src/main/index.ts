@@ -5,10 +5,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 // The single floating widget window
 let floatingWindow: BrowserWindow | null = null
 
-const BUBBLE_W = 64
-const BUBBLE_H = 64
-const EXPANDED_W = 420
-const EXPANDED_H = 600
+const BUBBLE_W = 96
+const BUBBLE_H = 96
 const MARGIN = 24
 
 function getBottomRightBounds(width: number, height: number) {
@@ -55,17 +53,13 @@ function createFloatingWindow() {
   }
 }
 
-// IPC: renderer asks to expand or collapse the window
-ipcMain.handle('window:expand', () => {
+// IPC: renderer sets the window size for the current UI state.
+// The window stays pinned to the bottom-right corner as it resizes.
+ipcMain.handle('window:setBounds', (_event, size: { w: number; h: number }) => {
   if (!floatingWindow) return
-  const bounds = getBottomRightBounds(EXPANDED_W, EXPANDED_H)
-  floatingWindow.setBounds(bounds, true)
-})
-
-ipcMain.handle('window:collapse', () => {
-  if (!floatingWindow) return
-  const bounds = getBottomRightBounds(BUBBLE_W, BUBBLE_H)
-  floatingWindow.setBounds(bounds, true)
+  const width = Math.round(size.w)
+  const height = Math.round(size.h)
+  floatingWindow.setBounds(getBottomRightBounds(width, height), true)
 })
 
 // IPC: relay AI streaming chunks back to renderer (called from main-side fetch)

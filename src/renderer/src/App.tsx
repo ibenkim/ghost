@@ -1,5 +1,10 @@
-import FloatingWidget from './components/FloatingWidget'
+import { WorkflowProvider } from './state/WorkflowContext'
+import GhostShell from './components/GhostShell'
 
 export default function App() {
-  return <FloatingWidget />
+  return (
+    <WorkflowProvider>
+      <GhostShell />
+    </WorkflowProvider>
+  )
 }
