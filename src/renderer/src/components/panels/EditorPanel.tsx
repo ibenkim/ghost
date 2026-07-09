@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useWorkflow } from '../../state/WorkflowContext'
 import MicIcon from '../ui/MicIcon'
 import type { EditorStep } from '../../state/types'
@@ -7,50 +7,131 @@ function renumber(steps: EditorStep[]): EditorStep[] {
   return steps.map((s, i) => ({ ...s, index: i + 1 }))
 }
 
-export default function EditorPanel() {
-  const { workflow, setWorkflow, saveWorkflow, runWorkflow, startRecording } = useWorkflow()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
+/** Renders a transcript with operator words (Only / Skip / Never) bolded. */
+function Transcript({ text }: { text: string }) {
+  const parts = text.split(/\b(Only|Skip|Never)\b/)
+  return (
+    <>
+      {parts.map((part, i) =>
+        ['Only', 'Skip', 'Never'].includes(part) ? <strong key={i}>{part}</strong> : part
+      )}
+    </>
+  )
+}
 
-  function updateTitle(title: string) {
-    setWorkflow({ ...workflow, title })
+export default function EditorPanel() {
+  const { workflow, setWorkflow, saveWorkflow, runWorkflow, recordAgain } = useWorkflow()
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftText, setDraftText] = useState('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [addingStep, setAddingStep] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [customFixId, setCustomFixId] = useState<string | null>(null)
+  const [customFixText, setCustomFixText] = useState('')
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  /** Commit an edit: "Forming new step…" → brief resolved flash → normal. */
+  function runFormingPipeline(id: string) {
+    setPhase(id, 'forming')
+    timers.current.push(
+      setTimeout(() => {
+        setPhase(id, 'resolved')
+        timers.current.push(setTimeout(() => setPhase(id, 'normal'), 900))
+      }, 1100)
+    )
   }
 
-  function updateStepTitle(id: string, title: string) {
-    setWorkflow({
-      ...workflow,
-      steps: workflow.steps.map((s) => (s.id === id ? { ...s, title } : s))
-    })
+  function setPhase(id: string, phase: EditorStep['phase']) {
+    setWorkflow((w) => ({
+      ...w,
+      steps: w.steps.map((s) => (s.id === id ? { ...s, phase } : s))
+    }))
+  }
+
+  // ── Title editing ──
+  function commitTitle() {
+    if (titleDraft.trim()) setWorkflow((w) => ({ ...w, title: titleDraft.trim() }))
+    setEditingTitle(false)
+  }
+
+  // ── Step editing ──
+  function beginEdit(step: EditorStep) {
+    setEditingId(step.id)
+    setDraftText(step.title)
+  }
+
+  function commitEdit(step: EditorStep) {
+    setEditingId(null)
+    const text = draftText.trim()
+    if (!text) {
+      // An empty new step is discarded; an emptied existing step keeps its old text.
+      if (addingStepIds.current.has(step.id)) deleteStep(step.id)
+      return
+    }
+    if (text !== step.title) {
+      setWorkflow((w) => ({
+        ...w,
+        steps: w.steps.map((s) => (s.id === step.id ? { ...s, title: text } : s))
+      }))
+      runFormingPipeline(step.id)
+    }
+    addingStepIds.current.delete(step.id)
+  }
+
+  function cancelEdit(step: EditorStep) {
+    setEditingId(null)
+    if (addingStepIds.current.has(step.id)) deleteStep(step.id)
   }
 
   function deleteStep(id: string) {
-    setWorkflow({
-      ...workflow,
-      steps: renumber(workflow.steps.filter((s) => s.id !== id))
-    })
-    setSelectedId(null)
+    addingStepIds.current.delete(id)
+    setWorkflow((w) => ({ ...w, steps: renumber(w.steps.filter((s) => s.id !== id)) }))
   }
 
+  // ── Add a step ──
+  const addingStepIds = useRef(new Set<string>())
   function addStep() {
+    if (addingStep) return
+    setAddingStep(true)
     const id = `s${Date.now()}`
-    const next = renumber([
-      ...workflow.steps,
-      { id, index: workflow.steps.length + 1, title: 'New step' }
-    ])
-    setWorkflow({ ...workflow, steps: next })
-    setSelectedId(id)
+    addingStepIds.current.add(id)
+    setWorkflow((w) => ({
+      ...w,
+      steps: renumber([...w.steps, { id, index: w.steps.length + 1, title: '' }])
+    }))
     setEditingId(id)
+    setDraftText('')
+    setAddingStep(false)
   }
 
-  function selectFixOption(stepId: string, optionId: string) {
-    setWorkflow({
-      ...workflow,
-      steps: workflow.steps.map((s) =>
-        s.id === stepId && s.fix
-          ? { ...s, fix: { ...s.fix, selectedOptionId: optionId } }
+  // ── Fix-step chips ──
+  function resolveFix(step: EditorStep, optionId: string, customValue?: string) {
+    const option = step.fix?.options.find((o) => o.id === optionId)
+    if (!option) return
+    const note =
+      optionId === 'ask-each-time'
+        ? 'Will ask during each run'
+        : customValue
+          ? `Will use “${customValue}”`
+          : `Will use ${option.label}`
+    setWorkflow((w) => ({
+      ...w,
+      steps: w.steps.map((s) =>
+        s.id === step.id
+          ? {
+              ...s,
+              fix: undefined,
+              fixNote: note,
+              phase: 'resolved' as const
+            }
           : s
       )
-    })
+    }))
+    setCustomFixId(null)
+    setCustomFixText('')
+    timers.current.push(setTimeout(() => setPhase(step.id, 'normal'), 1200))
   }
 
   return (
@@ -58,84 +139,105 @@ export default function EditorPanel() {
       <div>
         <div className="eyebrow">Here's what I learned</div>
         <div className="editor-title-row">
-          <input
-            className="editor-title-input"
-            value={workflow.title}
-            size={workflow.title.length || 1}
-            onChange={(e) => updateTitle(e.target.value)}
-          />
-          <span className="editor-edit-icon">
+          {editingTitle ? (
+            <input
+              className="editor-title-input"
+              autoFocus
+              value={titleDraft}
+              size={Math.max(titleDraft.length, 4)}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitTitle()
+                if (e.key === 'Escape') setEditingTitle(false)
+              }}
+            />
+          ) : (
+            <button
+              className="editor-title"
+              onClick={() => {
+                setTitleDraft(workflow.title)
+                setEditingTitle(true)
+              }}
+            >
+              {workflow.title}
+            </button>
+          )}
+          <span
+            className="editor-edit-icon"
+            onClick={() => {
+              setTitleDraft(workflow.title)
+              setEditingTitle(true)
+            }}
+          >
             <PencilIcon />
           </span>
         </div>
-        <div className="meta">{workflow.durationLabel}</div>
+        <div className="meta">{workflow.metaLabel}</div>
       </div>
 
       <div className="editor-steps scroll">
         {workflow.steps.map((step) => {
           if (step.fix) {
             return (
-              <div className="fix-step" key={step.id}>
-                <div className="fix-step-title">
-                  <span className="step-num">{step.index}</span> {step.title}
-                </div>
-                <div className="fix-step-prompt">{step.fix.prompt}</div>
-                <div className="fix-options">
-                  {step.fix.options.map((opt) => {
-                    const selected = step.fix!.selectedOptionId === opt.id
-                    return (
-                      <button
-                        key={opt.id}
-                        className={`fix-option ${
-                          selected
-                            ? 'fix-option-selected'
-                            : opt.kind === 'suggested'
-                              ? 'fix-option-suggested'
-                              : ''
-                        }`}
-                        onClick={() => selectFixOption(step.id, opt.id)}
-                      >
-                        {opt.kind === 'suggested' && <span>✦</span>}
-                        {opt.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              <FixCard
+                key={step.id}
+                step={step}
+                customOpen={customFixId === step.id}
+                customText={customFixText}
+                onCustomOpen={() => setCustomFixId(step.id)}
+                onCustomChange={setCustomFixText}
+                onCustomCommit={() => {
+                  if (customFixText.trim())
+                    resolveFix(step, 'something-else', customFixText.trim())
+                }}
+                onPick={(optionId) => resolveFix(step, optionId)}
+              />
             )
           }
 
-          const isSelected = selectedId === step.id
+          const isHovered = hoveredId === step.id
           const isEditing = editingId === step.id
+          const isForming = step.phase === 'forming'
+          const isResolved = step.phase === 'resolved'
+
           return (
             <div key={step.id}>
               <div
-                className={`step ${isSelected ? 'step-selected' : ''}`}
-                onMouseEnter={() => setSelectedId(step.id)}
-                onMouseLeave={() => !isEditing && setSelectedId(null)}
+                className={`step ${isHovered && !isForming ? 'step-selected' : ''} ${
+                  isResolved ? 'step-flash' : ''
+                }`}
+                onMouseEnter={() => setHoveredId(step.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onDoubleClick={() => !isForming && beginEdit(step)}
               >
                 <span className="step-num">{step.index}</span>
                 {isEditing ? (
                   <input
-                    className="editor-title-input step-title"
-                    style={{ fontSize: 11, fontWeight: 400 }}
+                    className="step-edit-input"
                     autoFocus
-                    value={step.title}
-                    onChange={(e) => updateStepTitle(step.id, e.target.value)}
-                    onBlur={() => setEditingId(null)}
-                    onKeyDown={(e) => e.key === 'Enter' && setEditingId(null)}
+                    placeholder="Describe the step in plain language"
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    onBlur={() => commitEdit(step)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitEdit(step)
+                      if (e.key === 'Escape') cancelEdit(step)
+                    }}
                   />
+                ) : isForming ? (
+                  <span className="step-title step-forming">Forming new step…</span>
                 ) : (
                   <span className="step-title">{step.title}</span>
                 )}
-                {step.resolved && !isSelected && (
+                {isResolved && !isEditing && (
                   <span className="step-check">
                     <CheckIcon />
                   </span>
                 )}
-                {isSelected && (
+                {isHovered && !isEditing && !isForming && (
                   <span className="step-actions">
-                    <button title="Edit" onClick={() => setEditingId(step.id)}>
+                    <button title="Edit" onClick={() => beginEdit(step)}>
                       <PencilIcon />
                     </button>
                     <button title="Delete" onClick={() => deleteStep(step.id)}>
@@ -144,10 +246,17 @@ export default function EditorPanel() {
                   </span>
                 )}
               </div>
-              {step.voiceNote && (
+              {step.voiceNote && !isEditing && (
                 <div className="step-voice-note">
                   <MicIcon size={8} />
-                  <span className="step-voice-note-text">{step.voiceNote.text}</span>
+                  <span className="step-voice-note-text">
+                    <Transcript text={step.voiceNote.text} />
+                  </span>
+                </div>
+              )}
+              {step.fixNote && !isEditing && (
+                <div className="step-voice-note">
+                  <span className="step-fix-note">{step.fixNote}</span>
                 </div>
               )}
             </div>
@@ -160,19 +269,104 @@ export default function EditorPanel() {
 
       <div className="panel-divider" />
       <div className="panel-footer">
-        <button className="btn-text" onClick={startRecording}>
-          Record again
-        </button>
-        <div className="footer-actions">
-          <button className="btn btn-outline" onClick={runWorkflow}>
-            Run it
-          </button>
-          <button className="btn btn-primary" onClick={saveWorkflow}>
-            Save Workflow
-          </button>
+        {confirmDiscard ? (
+          <div className="discard-confirm">
+            <span>Discard these {workflow.steps.length} steps?</span>
+            <button className="btn-danger-text" onClick={recordAgain}>
+              Discard
+            </button>
+            <button className="btn-text" onClick={() => setConfirmDiscard(false)}>
+              Keep
+            </button>
+          </div>
+        ) : (
+          <>
+            <button className="btn-text" onClick={() => setConfirmDiscard(true)}>
+              Record again
+            </button>
+            <div className="footer-actions">
+              <button className="btn btn-outline" onClick={runWorkflow}>
+                Run
+              </button>
+              <button className="btn btn-primary" onClick={saveWorkflow}>
+                Save Workflow
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FixCard({
+  step,
+  customOpen,
+  customText,
+  onCustomOpen,
+  onCustomChange,
+  onCustomCommit,
+  onPick
+}: {
+  step: EditorStep
+  customOpen: boolean
+  customText: string
+  onCustomOpen: () => void
+  onCustomChange: (v: string) => void
+  onCustomCommit: () => void
+  onPick: (optionId: string) => void
+}) {
+  const fix = step.fix!
+  return (
+    <div className="fix-step-row">
+      <span className="step-num fix-num">{step.index}</span>
+      <div className="fix-step">
+        <div className="fix-step-title">{step.title}</div>
+        <div className="fix-step-prompt">{fix.prompt}</div>
+        <div className="fix-options">
+          {fix.options.map((opt) => {
+            const preselected = fix.selectedOptionId === opt.id
+            if (opt.kind === 'other' && customOpen) {
+              return (
+                <input
+                  key={opt.id}
+                  className="fix-custom-input"
+                  autoFocus
+                  placeholder="Type a title…"
+                  value={customText}
+                  onChange={(e) => onCustomChange(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && onCustomCommit()}
+                />
+              )
+            }
+            return (
+              <button
+                key={opt.id}
+                className={`fix-option ${
+                  preselected
+                    ? 'fix-option-selected'
+                    : opt.kind === 'suggested'
+                      ? 'fix-option-suggested'
+                      : ''
+                }`}
+                onClick={() => (opt.kind === 'other' ? onCustomOpen() : onPick(opt.id))}
+              >
+                {opt.kind === 'suggested' && <SparkIcon />}
+                {opt.label}
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
+  )
+}
+
+function SparkIcon() {
+  return (
+    <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor">
+      <path d="M5 0l1.1 2.9L9 4 6.1 5.1 5 8 3.9 5.1 1 4l2.9-1.1z" />
+    </svg>
   )
 }
 

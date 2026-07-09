@@ -4,10 +4,11 @@ Items actively being worked on right now.
 
 ---
 
-Nothing in progress. The Ghost Workflow UI state machine is built — see `DONE.md`.
+Nothing in progress. The Ghost Workflow UI state machine now matches
+`reference1.md` (states 01–07) — see `DONE.md` for the full list.
 
-Next up (from `TODO.md`): polish transitions and, in a later phase, wire real
-capture + AI.
+Next up (from `TODO.md`): mascot context menu, idle-nub tuck, and state
+transition motion; later phases wire real capture + AI.
 
 ---
 

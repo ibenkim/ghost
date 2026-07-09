@@ -6,25 +6,18 @@ Items that have not been started yet.
 
 # Ghost Workflow UI — State machine (Figma `FFpTE8apfU6stJN0Bx9Yr1`)
 
-This phase ships the UI + interaction workflow only. AI capture and agent
-execution are mocked. States: idle → hover → recording → organizing →
-editor → running → summary.
+The state-machine phase shipped (see `DONE.md`): idle → hover → recording →
+organizing → editor → running → summary, with AI capture and agent execution
+mocked.
 
-## States
+## High-priority edit specified by the user that overrides the minor suggestions below.
 
-- [ ] Idle: purple floating bubble, bottom-right
-- [ ] Hover: "Record a workflow" panel (One app / Full screen + narrate)
-- [ ] Recording: bubble timer + expandable "Watching {app}" log
-- [ ] Organizing: transient "Organizing…" chip
-- [ ] Editor: "Here's what I learned" step list + fix-step + actions
-- [ ] Running: live step runner with pause/resume/skip/stop
-- [ ] Summary: "Here's what I've done" stopped/done variants
+## Remaining polish
 
-## Polish
-
-- [ ] Motion/transitions between states
-- [ ] Hover affordances (stop-recording chip, tooltips)
-- [ ] Match spacing/typography against Figma screenshots
+- [ ] Right-click context menu on the mascot (Open Library, Settings, Hide ghost)
+- [ ] Idle nub: drag-to-edge tuck + re-emerge (reference 1.2)
+- [ ] Cross-fade / spring transitions when the window resizes between states
+- [ ] Real app icons in the One-app list
 
 ---
 

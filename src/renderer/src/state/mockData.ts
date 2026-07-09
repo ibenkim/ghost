@@ -1,9 +1,4 @@
-import type {
-  RecordableApp,
-  RunStep,
-  SummaryStep,
-  Workflow
-} from './types'
+import type { RecordableApp, RunProject, Workflow } from './types'
 
 export const MOCK_APPS: RecordableApp[] = [
   { id: 'chrome', name: 'Chrome', detail: 'youtube.com' },
@@ -11,21 +6,23 @@ export const MOCK_APPS: RecordableApp[] = [
   { id: 'slack', name: 'Slack', detail: '#design-crit' }
 ]
 
-/** Steps that stream into the "Watching" log while recording. */
+/** Steps that stream into the "Watching" ledger while recording. */
 export const MOCK_WATCH_LOG: { time: string; text: string; voiceNote?: string }[] = [
-  { time: '00:23', text: 'Opened youtube.com' },
+  { time: '00:04', text: 'Opened youtube.com' },
   {
-    time: '00:23',
+    time: '00:11',
     text: 'Make exception for Youtube',
     voiceNote: '“...always skip the ads on this”'
   },
-  { time: '00:23', text: 'Send link to Minhyeok' }
+  { time: '00:19', text: 'Send link to Minhyeok' },
+  { time: '00:26', text: 'Copied the share link' },
+  { time: '00:31', text: 'Switched to Slack' }
 ]
 
 /** The workflow the AI "learns" after organizing a recording. */
 export const MOCK_WORKFLOW: Workflow = {
   title: 'Weekly crit prep',
-  durationLabel: '6 steps · 1:24',
+  metaLabel: '6 steps · 1:24',
   steps: [
     { id: 's1', index: 1, title: 'Open Q3 Onboarding in Figma' },
     {
@@ -43,50 +40,77 @@ export const MOCK_WORKFLOW: Workflow = {
         prompt: 'I saw “Crit – Jul 6.” Which title should I use?',
         selectedOptionId: 'ask-each-time',
         options: [
-          { id: 'ask-each-time', label: 'Ask each time', kind: 'selected' },
+          { id: 'ask-each-time', label: 'Ask each time', kind: 'default' },
           { id: 'todays-date', label: "Today's date", kind: 'suggested' },
           { id: 'keep-jul-6', label: 'Keep “Jul 6”', kind: 'default' },
-          { id: 'something-else', label: 'Something else', kind: 'default' }
+          { id: 'something-else', label: 'Something else', kind: 'other' }
         ]
       }
     },
-    { id: 's5', index: 5, title: 'Open Q3 Onboarding in Figma' },
-    { id: 's6', index: 6, title: 'Post the link in #design-crit', resolved: true }
+    { id: 's5', index: 5, title: 'Collect open comments' },
+    { id: 's6', index: 6, title: 'Post the link in #design-crit', phase: 'resolved' }
   ]
 }
 
-/** Steps shown in the running state, advanced on a mock interval. */
-export const MOCK_RUN_STEPS: RunStep[] = [
-  { id: 'r1', index: 1, label: 'Opened Q3 Onboarding in Figma', status: 'done' },
-  { id: 'r2', index: 2, label: 'Duplicated 4 updated frames', status: 'done' },
-  {
-    id: 'r3',
-    index: 3,
-    label: 'Pasting into the Crit page',
-    subLabel: 'Placing 3 frames...',
-    status: 'active'
-  },
-  { id: 'r4', index: 4, label: 'Post link in #design-crit', status: 'pending' }
-]
+/**
+ * Projects the workflow runs against. Each named item is processed with the
+ * same learned steps; the "Ask each time" step holds the run for an answer.
+ */
+export function makeRunProjects(): RunProject[] {
+  const makeSteps = (projectId: string, askEachTime: boolean) => [
+    {
+      id: `${projectId}-1`,
+      index: 1,
+      label: 'Open Q3 Onboarding in Figma',
+      doneLabel: 'Opened Q3 Onboarding in Figma',
+      status: 'pending' as const
+    },
+    {
+      id: `${projectId}-2`,
+      index: 2,
+      label: 'Duplicate updated frames',
+      doneLabel: 'Duplicated 4 updated frames',
+      status: 'pending' as const
+    },
+    {
+      id: `${projectId}-3`,
+      index: 3,
+      label: 'Paste into the Crit page',
+      doneLabel: 'Pasted into the Crit page',
+      activeDetail: 'Placing 3 frames...',
+      status: 'pending' as const
+    },
+    {
+      id: `${projectId}-4`,
+      index: 4,
+      label: 'Title the new section',
+      doneLabel: 'Titled the new section',
+      status: 'pending' as const,
+      question: askEachTime
+        ? {
+            prompt: 'Which title should I use here?',
+            answerId: null,
+            options: [
+              { id: 'todays-date', label: "Today's date", kind: 'suggested' as const },
+              { id: 'keep-name', label: 'Keep “Jul 6”', kind: 'default' as const },
+              { id: 'other', label: 'Other...', kind: 'other' as const }
+            ]
+          }
+        : undefined
+    },
+    {
+      id: `${projectId}-5`,
+      index: 5,
+      label: 'Post link in #design-crit',
+      doneLabel: 'Posted link in #design-crit',
+      status: 'pending' as const
+    }
+  ]
 
-export const MOCK_SUMMARY_STOPPED: SummaryStep[] = [
-  { id: 'p1', name: 'Project 1', time: '00:53', kind: 'default' },
-  { id: 'p2', name: 'Project 3', time: '01:03', note: 'Skipped Step 3', kind: 'skipped' },
-  {
-    id: 'p3',
-    name: 'Project 3',
-    time: '01:03',
-    note: 'Paused at Step 3/5',
-    kind: 'paused-step'
-  },
-  { id: 'p4', name: 'Project 1', time: '00:53', kind: 'not-yet' }
-]
-
-export const MOCK_SUMMARY_DONE: SummaryStep[] = [
-  { id: 'd1', name: 'Project 1', time: '00:53', kind: 'default' },
-  { id: 'd2', name: 'Project 3', time: '01:03', note: 'Skipped Step 3', kind: 'skipped' },
-  { id: 'd3', name: 'Project 1', time: '00:53', kind: 'default' },
-  { id: 'd4', name: 'Project 1', time: '00:53', kind: 'default' }
-]
-
-export const SUMMARY_STATUS_LINE = 'Stopped · 1 of 4 files · 1:12'
+  return [
+    { id: 'cubit', name: 'Cubit', steps: makeSteps('cubit', false) },
+    { id: 'ghost', name: 'Ghost', steps: makeSteps('ghost', true) },
+    { id: 'decor', name: 'Decor', steps: makeSteps('decor', false) },
+    { id: 'sunset', name: 'Sunset Studio', steps: makeSteps('sunset', false) }
+  ]
+}

@@ -12,8 +12,7 @@ export default function RecordPanel() {
     selectedAppId,
     setSelectedAppId,
     narrate,
-    setNarrate,
-    startRecording
+    setNarrate
   } = useWorkflow()
 
   return (
@@ -66,9 +65,7 @@ export default function RecordPanel() {
         <Toggle checked={narrate} onChange={setNarrate} />
       </div>
 
-      <button className="btn btn-primary record-start" onClick={startRecording}>
-        Start recording
-      </button>
+      <div className="record-hint">Press the ghost to start recording</div>
     </div>
   )
 }

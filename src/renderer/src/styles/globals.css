@@ -30,6 +30,7 @@
   --pause: rgba(179, 95, 72, 0.7);
   --pause-bg: rgba(255, 236, 231, 0.7);
   --fix: rgba(194, 117, 96, 0.9);
+  --done-teal: rgba(13, 148, 136, 0.9);
 
   /* Bubble */
   --bubble-size: 50px;
@@ -54,7 +55,7 @@ html, body, #root {
   align-items: flex-end;
   justify-content: flex-end;
   gap: 10px;
-  padding: 6px;
+  padding: 8px;
 }
 
 .panel-slot {
@@ -71,7 +72,7 @@ html, body, #root {
   box-shadow: var(--card-shadow);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  animation: cardIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: cardIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes cardIn {
@@ -79,11 +80,88 @@ html, body, #root {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ── Bubble ── */
+/* ── Status pill (organizing / saved toast) ── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 10px;
+  color: var(--text-soft);
+  animation: cardIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.toast-pill { color: var(--accent-strong); font-weight: 500; }
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bar-gray);
+  border-top-color: var(--accent-strong);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Bubble + side chips ── */
 .bubble-wrap {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.bubble-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.side-pill {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.side-pill svg { color: var(--icon-color); }
+.side-pill:hover { color: var(--text); }
+
+.side-label {
+  font-size: 10px;
+  color: var(--text-soft);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  box-shadow: var(--card-shadow);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.slide-in { animation: slideIn 0.18s ease-out; }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.bubble-stack {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .bubble {
@@ -100,24 +178,17 @@ html, body, #root {
   box-shadow: 0 6px 20px rgba(51, 25, 217, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s;
   position: relative;
-  flex-shrink: 0;
 }
 .bubble:hover { transform: scale(1.06); filter: brightness(1.08); }
 .bubble:active { transform: scale(0.96); }
 
-.bubble-timer {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  background: #fff;
-  color: var(--text);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 3px 5px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
+/* Ready-to-record: mascot brightens while the panel is open */
+.bubble.ready { filter: brightness(1.1); }
+
+/* Non-pressable states (organizing, editor, running-expanded, summary) */
+.bubble-inert { cursor: default; }
+.bubble-inert:hover { transform: none; filter: none; }
+.bubble-inert:active { transform: none; }
 
 /* Pulsing ring for idle */
 .bubble.idle::after {
@@ -135,34 +206,56 @@ html, body, #root {
 }
 
 /* Recording ring */
-.bubble.recording {
-  background: #fff;
-  color: var(--danger);
-}
-.bubble.recording .rec-dot {
-  width: 16px;
-  height: 16px;
+.bubble.recording::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
   border-radius: 50%;
-  background: var(--danger);
+  border: 2px solid rgba(229, 55, 43, 0.5);
+  animation: pulse 1.8s ease-out infinite;
 }
 
-/* Chip beside the bubble (stop recording / hover hints) */
-.side-chip {
+/* Pause chip + timer pill anchored to the bubble (Figma: top-right) */
+.pause-chip {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.pause-chip:hover { color: var(--text); }
+
+.timer-pill {
+  position: absolute;
+  right: -6px;
+  bottom: -8px;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 8px;
-  box-shadow: var(--card-shadow);
-  padding: 4px 10px;
-  font-size: 11px;
   color: var(--text);
-  white-space: nowrap;
-  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
+.timer-paused { color: var(--pause); }
 
 /* ── Typography helpers ── */
 .eyebrow { font-size: 9px; color: var(--icon-color); }
 .title-lg { font-size: 14px; font-weight: 600; color: var(--text); }
-.meta { font-size: 9px; color: var(--text-faint); }
+.meta { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
 
 /* ── Scrollbars ── */
 .scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent; }
@@ -196,15 +289,29 @@ html, body, #root {
   background: transparent;
   border: none;
   color: var(--text-muted);
+  font-family: inherit;
   font-size: 11px;
   cursor: pointer;
   padding: 0;
 }
+.btn-text:hover { color: var(--text); }
+.btn-text-sm { font-size: 9px; }
 .btn-danger-text {
   background: transparent;
   border: none;
   color: var(--danger);
+  font-family: inherit;
   font-size: 9px;
   cursor: pointer;
   padding: 0;
 }
+
+.chevron-btn {
+  background: transparent;
+  border: none;
+  color: var(--icon-color);
+  cursor: pointer;
+  display: flex;
+  padding: 3px;
+}
+.chevron-btn:hover { color: var(--text-muted); }
