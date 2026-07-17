@@ -22,7 +22,7 @@ export default function RecordPanel() {
   ]
 
   return (
-    <div className="glass-card record-panel">
+    <div className="glass-card record-panel glass-stroke glass-stroke-panel">
         <div className="record-header">Record a workflow</div>
 
         <div className="segmented">

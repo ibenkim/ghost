@@ -3,8 +3,19 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 const ghostBridge = {
   /** Resize the pill window; returns the panel placement ('above' | 'below'). */
-  setBounds: (w: number, h: number, mode: 'pill' | 'panel') =>
-    ipcRenderer.invoke('window:setBounds', { w, h, mode }),
+  setBounds: (
+    w: number,
+    h: number,
+    mode: 'pill' | 'glass' | 'panel',
+    opts?: { durationMs?: number; pillDrive?: boolean }
+  ) =>
+    ipcRenderer.invoke('window:setBounds', {
+      w,
+      h,
+      mode,
+      durationMs: opts?.durationMs,
+      pillDrive: opts?.pillDrive
+    }),
   /** Open (or focus) the workspace window. */
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   /** Close the calling window. */
@@ -13,8 +24,9 @@ const ghostBridge = {
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   /** Show the native right-click context menu for the pill. */
   showContextMenu: () => ipcRenderer.invoke('pill:contextMenu'),
-  /** Begin dragging the pill window; offset is the cursor position inside it. */
-  dragStart: (x: number, y: number) => ipcRenderer.invoke('pill:dragStart', { x, y }),
+  /** Begin dragging; collapseToPill=false keeps the glass panel open while dragging. */
+  dragStart: (x: number, y: number, opts?: { collapseToPill?: boolean }) =>
+    ipcRenderer.invoke('pill:dragStart', { x, y, collapseToPill: opts?.collapseToPill }),
   dragEnd: () => ipcRenderer.invoke('pill:dragEnd'),
   /** Workspace → pill: run a workflow now. */
   runWorkflow: (workflowId: string) => ipcRenderer.invoke('pill:runWorkflow', workflowId),

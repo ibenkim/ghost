@@ -1,18 +1,17 @@
 /* ══ Desktop pill panels ══ */
 
-/* ── Record panel (02) — glass ── */
+/* ── Record panel (02) — glass (Figma 220:1660) ── */
 .glass-card {
-  background: var(--glass-bg);
-  border: 0.5px solid rgba(255, 255, 255, 0.9);
+  background: var(--glass-panel-bg);
   border-radius: 10px;
-  box-shadow: var(--panel-shadow);
-  backdrop-filter: blur(17px);
-  -webkit-backdrop-filter: blur(17px);
-  animation: pillIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .record-panel {
   width: 266px;
+  /* Intrinsic height for a full open — avoids flex-shrink measuring ~81 on close. */
+  min-height: 289px;
   padding: 14px 12px 14px;
   display: flex;
   flex-direction: column;
@@ -181,7 +180,6 @@
   padding: 3px 5px 10px;
   display: flex;
   flex-direction: column;
-  animation: pillIn 0.2s ease-out;
 }
 
 .ledger-header {
@@ -269,7 +267,6 @@
   padding: 16px 14px 14px;
   display: flex;
   flex-direction: column;
-  animation: pillIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .editor-collapse {
   position: absolute;
@@ -547,7 +544,6 @@
   padding: 3px 6px 10px;
   display: flex;
   flex-direction: column;
-  animation: pillIn 0.2s ease-out;
 }
 
 .run-steps {
@@ -638,7 +634,6 @@
   padding: 15px 10px 14px;
   display: flex;
   flex-direction: column;
-  animation: pillIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .summary-head { padding: 0 6px 8px; }
 .summary-title { font-size: 13px; font-weight: 600; color: var(--text); }

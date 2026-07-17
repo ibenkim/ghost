@@ -3,7 +3,8 @@
 Items that have not been started yet.
 
 Source of truth: `.planning/reference2.md` (v2 redesign). The v2 build
-(Phases A–L) shipped — see `DONE.md`. What remains below is polish that needs
+(Phases A–L), pill interaction polish, and the high-priority morph + glass
+border pass shipped — see `DONE.md`. What remains below is polish that needs
 another design pass, plus the parked Future-work and AI lists.
 
 ## High-priority edit specified by the user that overrides the minor suggestions below.
@@ -12,8 +13,6 @@ another design pass, plus the parked Future-work and AI lists.
 
 ## Remaining polish (v2)
 
-- [ ] Pill ↔ panel morph animation (pill stretches into the ledger/panel
-      instead of cross-fading)
 - [ ] Native ⌥ (bare Option) hotkey — currently ⌥G via globalShortcut; a bare
       modifier needs a low-level keyboard hook
 - [ ] Live "Upcoming" computation from a real schedule model (currently

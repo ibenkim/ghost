@@ -35,7 +35,7 @@ export default function GhostPill() {
   // never while a drag is in progress (hover and drag are exclusive).
   useEffect(() => {
     if (hovered && state === 'idle' && !dragging.current) {
-      hoverTimer.current = setTimeout(() => openHover(), 250)
+      hoverTimer.current = setTimeout(() => openHover(), 500)
       return () => {
         if (hoverTimer.current) clearTimeout(hoverTimer.current)
         hoverTimer.current = null
@@ -45,8 +45,7 @@ export default function GhostPill() {
   }, [hovered, state, openHover])
 
   // A press only becomes a drag after the cursor moves past a small
-  // threshold — a plain click on the pill is not a drag (and must not
-  // dismiss the hover panel; it counts as interacting with it).
+  // threshold — a plain click toggles the hover panel open/closed.
   const pressStart = useRef<{ x: number; y: number } | null>(null)
 
   function handleMouseDown(e: React.MouseEvent) {
@@ -64,17 +63,25 @@ export default function GhostPill() {
       if (!pressStart.current || dragging.current) return
       const dx = e.clientX - pressStart.current.x
       const dy = e.clientY - pressStart.current.y
+      // Same movement threshold as open: past this = drag, not click.
       if (dx * dx + dy * dy < 16) return
       dragging.current = true
-      beginDrag()
-      window.ghostBridge?.dragStart?.(e.clientX, e.clientY)
+      const { collapseToPill } = beginDrag()
+      window.ghostBridge?.dragStart?.(e.clientX, e.clientY, { collapseToPill })
     }
     function onUp() {
+      const wasPress = !!pressStart.current
       pressStart.current = null
-      if (!dragging.current) return
-      dragging.current = false
-      endDrag()
-      window.ghostBridge?.dragEnd?.()
+      if (dragging.current) {
+        dragging.current = false
+        endDrag()
+        window.ghostBridge?.dragEnd?.()
+        return
+      }
+      if (!wasPress) return
+      // No drag movement → treat as click (open when idle, close when hover).
+      if (state === 'idle') openHover()
+      else if (state === 'hover') closeHover()
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -82,7 +89,7 @@ export default function GhostPill() {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [beginDrag, endDrag])
+  }, [beginDrag, endDrag, openHover, closeHover, state])
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault()
@@ -115,7 +122,7 @@ export default function GhostPill() {
   // ── Organizing: "Thinking..." ──
   if (state === 'organizing') {
     return (
-      <div className="pill pill-glass" {...sharedProps}>
+      <div className="pill pill-glass glass-stroke glass-stroke-pill" {...sharedProps}>
         <span className="pill-text pill-text-light pill-blink">Thinking...</span>
       </div>
     )
@@ -151,7 +158,10 @@ export default function GhostPill() {
 
   // ── Idle / hover: "Hello" (logo/mark placeholder) or saved toast ──
   return (
-    <div className={`pill pill-glass ${state === 'hover' ? 'pill-ready' : ''}`} {...sharedProps}>
+    <div
+      className={`pill pill-glass glass-stroke glass-stroke-pill ${state === 'hover' ? 'pill-ready' : ''}`}
+      {...sharedProps}
+    >
       <span className="pill-text pill-text-light">{toast ?? 'Hello'}</span>
     </div>
   )

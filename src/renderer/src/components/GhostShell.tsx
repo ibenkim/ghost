@@ -16,6 +16,9 @@ export default function GhostShell() {
     closeHover,
     panelPlacement,
     hoverFading,
+    hoverDismissMode,
+    hoverPinned,
+    pinHover,
     reportHoverPanelHeight
   } = useWorkflow()
 
@@ -33,18 +36,18 @@ export default function GhostShell() {
 
   /**
    * Hover-panel dismissal rules:
-   * 1. A click outside the panel + pill dismisses it (window blur — clicking
-   *    inside focuses us, so a later outside click always blurs).
-   * 2. Moving the cursor away dismisses it only while the user has NOT yet
-   *    clicked the pill or the panel; once they interact, only rule 1 applies.
-   * The interaction flag resets every time the panel disappears.
+   * 1. A click outside the panel + pill dismisses it (window blur).
+   * 2. Cursor-leave dismisses only if the user has NOT clicked the panel or
+   *    dragged the UI this open. Pin resets every time hover opens again.
    */
-  const interactedRef = useRef(false)
   const graceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Drag/click pin cancels a pending cursor-leave close.
   useEffect(() => {
-    if (state !== 'hover') interactedRef.current = false
-  }, [state])
+    if (!hoverPinned || !graceTimer.current) return
+    clearTimeout(graceTimer.current)
+    graceTimer.current = null
+  }, [hoverPinned])
 
   // Rule 1: click outside the UI → dismiss.
   useEffect(() => {
@@ -56,13 +59,16 @@ export default function GhostShell() {
     return () => window.removeEventListener('blur', onBlur)
   }, [state, closeHover])
 
-  function handleRootMouseDown() {
-    if (state === 'hover') interactedRef.current = true
+  function handleRootMouseDown(e: React.MouseEvent) {
+    if (state !== 'hover') return
+    // Pill click toggles close — only panel clicks pin via click.
+    if ((e.target as HTMLElement).closest('.pill')) return
+    pinHover()
   }
 
-  // Rule 2: cursor leaves without prior interaction → dismiss after grace.
+  // Rule 2: cursor leaves without pin (click/drag) → dismiss after grace.
   function handleMouseLeave() {
-    if (state !== 'hover' || hoverFading || interactedRef.current) return
+    if (state !== 'hover' || hoverFading || hoverPinned) return
     graceTimer.current = setTimeout(closeHover, 220)
   }
 
@@ -96,6 +102,7 @@ export default function GhostShell() {
     'ghost-root',
     pillMode ? 'ghost-root-pill' : '',
     state === 'hover' ? 'ghost-root-glass' : '',
+    state === 'hover' && hoverFading ? 'ghost-root-closing' : '',
     !pillMode && panelPlacement === 'below' ? 'ghost-root-below' : ''
   ]
     .filter(Boolean)
@@ -110,14 +117,40 @@ export default function GhostShell() {
     >
       <div className="panel-slot">
         {state === 'hover' && (
-          <div ref={hoverPanelRef} className={hoverFading ? 'panel-fading' : undefined}>
+          <div
+            ref={hoverPanelRef}
+            className={[
+              'morph-panel',
+              hoverFading
+                ? hoverDismissMode === 'drag'
+                  ? 'morph-panel-drag'
+                  : 'morph-panel-out'
+                : 'morph-panel-in'
+            ].join(' ')}
+          >
             <RecordPanel />
           </div>
         )}
-        {state === 'recording' && watchExpanded && <LearningPanel />}
-        {state === 'editor' && !editorCollapsed && <EditorPanel />}
-        {state === 'running' && !runCollapsed && <RunningPanel />}
-        {state === 'summary' && <SummaryPanel />}
+        {state === 'recording' && watchExpanded && (
+          <div className="morph-panel morph-panel-in">
+            <LearningPanel />
+          </div>
+        )}
+        {state === 'editor' && !editorCollapsed && (
+          <div className="morph-panel morph-panel-in">
+            <EditorPanel />
+          </div>
+        )}
+        {state === 'running' && !runCollapsed && (
+          <div className="morph-panel morph-panel-in">
+            <RunningPanel />
+          </div>
+        )}
+        {state === 'summary' && (
+          <div className="morph-panel morph-panel-in">
+            <SummaryPanel />
+          </div>
+        )}
       </div>
       {!expandedPanel && <GhostPill />}
     </div>

@@ -97,6 +97,42 @@ Completed and shipped items.
       context menu, window close/minimize
 - [x] Verified: tsc clean, electron-vite build, Electron boots
 
+## 2026-07-17 — Pill interaction polish (hover, drag, blur)
+
+- [x] Fixed hover flicker + button wobble: window resizes are instant
+      (`animate: false`); persistent `pillAnchor` in main process so resizes
+      never derive position from mid-drag / mid-animation bounds
+- [x] Fixed drag lag / stuck cursor: resize requests deferred while drag is
+      active and applied once at drag end; drag poll keeps anchor in sync
+- [x] Hover ↔ drag mutual exclusion: 250ms dwell before opening hover panel;
+      drag cancels pending hover; `openHover` blocked while dragging; 4px
+      movement threshold before drag starts (plain click does not trigger drag)
+- [x] Drag-while-hover: hover panel plays a quick fade-out (`hoverFading`)
+      and closes when drag begins on the pill
+- [x] Smart panel placement: prefers above the pill; flips below when
+      obstructed by screen edge (`panelPlacement` reported from main)
+- [x] Native background blur: macOS `vibrancy: 'hud'` on the pill window;
+      hover state uses `mode: 'glass'` so the record panel gets real desktop
+      blur; window hugs measured content height via `ResizeObserver`
+- [x] Idle-hover dismissal rules (reapplied every time the panel closes):
+      click outside the UI + pill dismisses (window `blur`); cursor leaving
+      dismisses only before the user has clicked the pill or panel
+      (`interactedRef` resets on close); Esc still dismisses
+- [x] User confirmed: major flicker / wobble / drag issues resolved
+
+## 2026-07-17 — High-priority: glass borders + pill ↔ panel morph
+
+- [x] Smoother glass hairlines for hud pill + hover panel (Figma
+      229:1696 / 220:1660): replaced sub-pixel CSS `border` with layered
+      inset rim strokes (`.glass-stroke` / `-pill` / `-panel`) that
+      anti-alias cleanly on vibrancy; pill blur 15px + fill 0.15, panel
+      blur 20px + fill 0.2, radii 10px
+- [x] Pill ↔ panel morph: panels grow from the pill silhouette
+      (`transform-origin` bottom-right, or top-right when placed below)
+      instead of cross-fading; idle→hover morph-in, dismiss morphs back
+      into the pill (280ms), drag-dismiss uses a faster morph-out (130ms);
+      same morph-in applied to learning / editor / running / summary
+
 ---
 
 > Items land here once work is complete and confirmed working.
