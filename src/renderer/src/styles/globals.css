@@ -2,38 +2,33 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Surfaces */
-  --card-bg: rgba(252, 252, 253, 0.95);
-  --card-border: rgba(255, 255, 255, 0.95);
-  --card-shadow: 0px 4px 30px rgba(62, 43, 73, 0.2);
-  --card-radius: 10px;
-  --bar-gray: rgba(62, 43, 73, 0.08);
-
-  /* Text */
+  /* Ink */
   --text: rgba(22, 20, 39, 0.9);
-  --text-muted: rgba(22, 20, 39, 0.55);
-  --text-faint: rgba(22, 20, 39, 0.3);
-  --text-soft: rgba(22, 20, 39, 0.7);
+  --text-70: rgba(22, 20, 39, 0.7);
+  --text-40: rgba(22, 20, 39, 0.4);
+  --text-30: rgba(22, 20, 39, 0.3);
+  --text-15: rgba(22, 20, 39, 0.15);
   --icon-color: rgba(161, 161, 171, 0.8);
+  --white-text: rgba(252, 252, 253, 0.95);
+  --white3: rgba(234, 234, 234, 0.8);
 
   /* Accent */
-  --accent: rgba(51, 25, 217, 0.7);
-  --accent-strong: rgb(51, 25, 217);
-  --accent-2: rgba(44, 42, 151, 0.7);
-  --accent-tint: rgba(51, 25, 217, 0.1);
-  --accent-tint-soft: rgba(231, 228, 255, 0.4);
-  --accent-gradient: linear-gradient(147deg, rgba(51, 25, 217, 0.7) 3%, rgba(44, 42, 151, 0.7) 93%);
-  --accent-gradient-strong: linear-gradient(138deg, rgba(51, 25, 217, 0.9) 3%, rgba(44, 42, 151, 0.9) 93%);
+  --purple: #3319d9;
+  --purple-70: rgba(51, 25, 217, 0.7);
+  --main: #625b8f;
 
   /* Semantic */
   --danger: rgba(229, 55, 43, 0.8);
-  --pause: rgba(179, 95, 72, 0.7);
-  --pause-bg: rgba(255, 236, 231, 0.7);
-  --fix: rgba(194, 117, 96, 0.9);
-  --done-teal: rgba(13, 148, 136, 0.9);
+  --amber: rgba(194, 117, 96, 0.7);
+  --amber-text: #c27560;
+  --apricot: rgba(211, 164, 106, 0.8);
+  --apricot-text: rgba(197, 127, 40, 0.8);
+  --rose: rgba(217, 107, 80, 0.85);
 
-  /* Bubble */
-  --bubble-size: 50px;
+  /* Surfaces */
+  --glass-bg: rgba(22, 20, 39, 0.15);
+  --panel-shadow: 0px 4px 30px rgba(62, 43, 73, 0.2);
+  --pill-shadow: 0px 4px 30px rgba(98, 91, 143, 0.4);
 }
 
 html, body, #root {
@@ -41,12 +36,18 @@ html, body, #root {
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Instrument Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
+  font-size: 11px;
   color: var(--text);
 }
 
-/* ── Layout root: content grows up from the bottom-right corner ── */
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ── Pill window layout: content grows up from the bottom-right corner ── */
 .ghost-root {
   position: fixed;
   inset: 0;
@@ -55,7 +56,40 @@ html, body, #root {
   align-items: flex-end;
   justify-content: flex-end;
   gap: 10px;
-  padding: 8px;
+  padding: 10px;
+}
+
+/* Pill mode: the window is sized exactly to the pill (native blur/shadow). */
+.ghost-root-pill {
+  padding: 0;
+  gap: 0;
+}
+.ghost-root-pill .pill {
+  width: 100%;
+  height: 100%;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Glass mode (hover): the window hugs panel + gap + pill, all natively
+   frosted — the panel and pill span the full window width. */
+.ghost-root-glass {
+  padding: 0;
+  gap: 8px;
+}
+.ghost-root-glass .pill {
+  width: 100%;
+  box-shadow: none;
+}
+.ghost-root-glass .record-panel {
+  width: 266px;
+  box-shadow: none;
+}
+
+/* Obstructed above → the panel opens below the pill instead. */
+.ghost-root-below {
+  flex-direction: column-reverse;
+  justify-content: flex-end;
 }
 
 .panel-slot {
@@ -64,245 +98,167 @@ html, body, #root {
   width: 100%;
 }
 
-/* ── Shared card ── */
-.card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  animation: cardIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* Quick fade-out for the hover panel when a drag begins. */
+.panel-fading {
+  animation: panelFadeOut 0.13s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes panelFadeOut {
+  to { opacity: 0; transform: scale(0.97); }
 }
 
-@keyframes cardIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* ── Status pill (organizing / saved toast) ── */
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  box-shadow: var(--card-shadow);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  font-size: 10px;
-  color: var(--text-soft);
-  animation: cardIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.toast-pill { color: var(--accent-strong); font-weight: 500; }
-
-.spinner {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid var(--bar-gray);
-  border-top-color: var(--accent-strong);
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Bubble + side chips ── */
-.bubble-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.bubble-chips {
+/* ── The pill — a horizontal glass capsule; the pill IS the character ── */
+.pill-stack {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
 }
 
-.side-pill {
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  border-radius: 10px;
+  padding: 0 6px 0 3px;
+  user-select: none;
+  animation: pillIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pillIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Idle / organizing: translucent glass */
+.pill-glass {
+  background: var(--glass-bg);
+  border: 0.6px solid rgba(255, 255, 255, 0.9);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  justify-content: center;
+  min-width: 94px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+}
+.pill-glass:hover, .pill-ready { filter: brightness(1.12); }
+
+/* Recording / editing / running: white with purple border */
+.pill-active {
+  background: rgba(252, 252, 253, 0.95);
+  border: 1px solid var(--purple);
+  box-shadow: var(--pill-shadow);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  gap: 6px;
+}
+
+/* Apricot state: a held question is never silent */
+.pill-apricot { border-color: var(--apricot); }
+
+.pill-body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
-  box-shadow: var(--card-shadow);
-  font-family: inherit;
-  font-size: 9px;
-  color: var(--text-soft);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.side-pill svg { color: var(--icon-color); }
-.side-pill:hover { color: var(--text); }
-
-.side-label {
-  font-size: 10px;
-  color: var(--text-soft);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 999px;
-  box-shadow: var(--card-shadow);
-  padding: 4px 10px;
-  white-space: nowrap;
-}
-
-.slide-in { animation: slideIn 0.18s ease-out; }
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(8px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-.bubble-stack {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.bubble {
-  width: var(--bubble-size);
-  height: var(--bubble-size);
-  border-radius: 50%;
+  background: transparent;
   border: none;
-  background: var(--accent-gradient-strong);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(51, 25, 217, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s;
-  position: relative;
-}
-.bubble:hover { transform: scale(1.06); filter: brightness(1.08); }
-.bubble:active { transform: scale(0.96); }
-
-/* Ready-to-record: mascot brightens while the panel is open */
-.bubble.ready { filter: brightness(1.1); }
-
-/* Non-pressable states (organizing, editor, running-expanded, summary) */
-.bubble-inert { cursor: default; }
-.bubble-inert:hover { transform: none; filter: none; }
-.bubble-inert:active { transform: none; }
-
-/* Pulsing ring for idle */
-.bubble.idle::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid rgba(51, 25, 217, 0.4);
-  animation: pulse 2.6s ease-out infinite;
-}
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.6; }
-  70% { transform: scale(1.3); opacity: 0; }
-  100% { transform: scale(1.3); opacity: 0; }
+  height: 100%;
+  padding: 0 2px;
+  color: var(--icon-color);
 }
 
-/* Recording ring */
-.bubble.recording::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid rgba(229, 55, 43, 0.5);
-  animation: pulse 1.8s ease-out infinite;
+.pill-text {
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.pill-text-light { color: var(--white-text); }
+.pill-dim { color: var(--text-40); }
+.pill-time {
+  font-size: 11px;
+  color: var(--text-40);
+  font-variant-numeric: tabular-nums;
+}
+.pill-blink { animation: blink 1.2s ease-in-out infinite; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
-/* Pause chip + timer pill anchored to the bubble (Figma: top-right) */
-.pause-chip {
-  position: absolute;
-  top: -3px;
-  right: -6px;
+/* Hotkey hint (shown at the bottom of the record panel) */
+.record-hint {
+  font-size: 10px;
+  color: var(--white3);
+  text-align: center;
+  padding-top: 2px;
+}
+
+/* Pause / resume — the pill's leading icon (the only pause control) */
+.pause-btn {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-  color: var(--text-muted);
-  display: flex;
+  border: none;
+  background: var(--main);
+  color: #fff;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  flex-shrink: 0;
   padding: 0;
 }
-.pause-chip:hover { color: var(--text); }
+.pause-btn:hover { filter: brightness(1.15); }
 
-.timer-pill {
-  position: absolute;
-  right: -6px;
-  bottom: -8px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  color: var(--text);
-  font-size: 9px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  padding: 3px 6px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-}
-.timer-paused { color: var(--pause); }
-
-/* ── Typography helpers ── */
-.eyebrow { font-size: 9px; color: var(--icon-color); }
-.title-lg { font-size: 14px; font-weight: 600; color: var(--text); }
-.meta { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
-
-/* ── Scrollbars ── */
-.scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent; }
-.scroll::-webkit-scrollbar { width: 4px; }
-.scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
-
-/* ── Buttons ── */
+/* ── Shared buttons ── */
 .btn {
-  font-family: inherit;
   font-size: 11px;
+  font-weight: 500;
   border-radius: 10px;
   padding: 8px 14px;
-  cursor: pointer;
-  border: none;
-  transition: filter 0.15s, background 0.15s;
-}
-.btn-primary {
-  background: var(--accent-gradient-strong);
-  color: #fff;
-  font-weight: 500;
-}
-.btn-primary:hover { filter: brightness(1.08); }
-.btn-outline {
+  border: 1px solid var(--text-40);
   background: transparent;
-  border: 0.5px solid var(--icon-color);
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--text-70);
+  transition: background 0.15s, filter 0.15s;
 }
-.btn-outline:hover { background: rgba(0, 0, 0, 0.03); }
+.btn:hover { background: rgba(0, 0, 0, 0.04); }
+.btn-outline { background: transparent; }
+.btn-primary { color: var(--text-70); }
+.btn-primary:hover { background: rgba(51, 25, 217, 0.06); }
+.btn-done { border-color: var(--text-40); }
+
+.btn-small-outline {
+  font-size: 11px;
+  font-weight: 500;
+  border: 0.8px solid var(--text-40);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-70);
+  padding: 4px 14px;
+  white-space: nowrap;
+}
+.btn-small-outline:hover { background: rgba(0, 0, 0, 0.04); }
+
 .btn-text {
   background: transparent;
   border: none;
-  color: var(--text-muted);
-  font-family: inherit;
+  color: var(--text-40);
   font-size: 11px;
-  cursor: pointer;
   padding: 0;
 }
-.btn-text:hover { color: var(--text); }
-.btn-text-sm { font-size: 9px; }
-.btn-danger-text {
+.btn-text:hover { color: var(--text-70); }
+.btn-text-sm { font-size: 11px; }
+
+.cancel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: transparent;
   border: none;
   color: var(--danger);
-  font-family: inherit;
-  font-size: 9px;
-  cursor: pointer;
+  font-size: 11px;
   padding: 0;
 }
 
@@ -310,8 +266,38 @@ html, body, #root {
   background: transparent;
   border: none;
   color: var(--icon-color);
-  cursor: pointer;
   display: flex;
-  padding: 3px;
+  padding: 4px;
 }
-.chevron-btn:hover { color: var(--text-muted); }
+.chevron-btn:hover { color: var(--text-70); }
+
+/* ── Typography helpers ── */
+.eyebrow { font-size: 11px; color: var(--icon-color); }
+.meta { font-size: 11px; color: var(--text-30); margin-top: 2px; }
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-40);
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+/* ── Scrollbars ── */
+.scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent; }
+.scroll::-webkit-scrollbar { width: 4px; }
+.scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
+
+/* ── App chip (icon + name) ── */
+.app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  vertical-align: middle;
+}
+.app-chip svg { border-radius: 4px; }
+.app-chip-muted { color: var(--text-40); }
+.app-chip-muted svg { opacity: 0.55; }

@@ -15,24 +15,35 @@ export type RecordableApp = {
   detail: string
 }
 
+/** An app referenced by a step, rendered as an inline chip (icon + name). */
+export type StepApp = {
+  id: 'figma' | 'chrome' | 'slack' | 'finder' | 'mail'
+  name: string
+}
+
 /** A voice note captured alongside a step while narrating. */
 export type VoiceNote = {
   text: string
-}
-
-/** A clarifying question the AI asks about a step, with chip options. */
-export type FixStep = {
-  prompt: string
-  options: FixOption[]
-  selectedOptionId: string | null
-  /** Value typed into the "Something else" inline input, once committed. */
-  customValue?: string
 }
 
 export type FixOption = {
   id: string
   label: string
   kind: 'default' | 'suggested' | 'other'
+}
+
+/**
+ * A clarifying question the AI asks about a step.
+ * Selections are never terminal: a resolved card collapses into a chip-token
+ * that re-expands on click.
+ */
+export type FixStep = {
+  prompt: string
+  options: FixOption[]
+  selectedOptionId: string
+  customValue?: string
+  /** True once a chip has been picked — renders as chip-token + chevron. */
+  collapsed: boolean
 }
 
 /** Transient lifecycle of an editor step after an edit commits. */
@@ -42,20 +53,27 @@ export type EditorStep = {
   id: string
   index: number
   title: string
+  app?: StepApp
   voiceNote?: VoiceNote
   fix?: FixStep
-  /** Sub-line shown after a fix card is resolved, e.g. "Will ask during runs". */
-  fixNote?: string
   phase?: StepPhase
+}
+
+export type Trigger = {
+  /** e.g. "1st of each month at 9:00 A.M." — undefined = manual-only. */
+  schedule?: string
+  /** e.g. "August 1, 2026" */
+  upcoming?: string
 }
 
 export type Workflow = {
   title: string
   metaLabel: string
+  trigger: Trigger
   steps: EditorStep[]
 }
 
-// ── Running ──
+// ── Running (flat single-workflow ledger) ──
 
 export type RunStepStatus = 'pending' | 'active' | 'question' | 'skipped' | 'done'
 
@@ -69,33 +87,54 @@ export type RunQuestion = {
 export type RunStep = {
   id: string
   index: number
-  /** Shown before/while the step runs, e.g. "Paste into the Crit page". */
+  /** Present/imperative wording, e.g. "Paste them into Crit page". */
   label: string
-  /** Shown once done, e.g. "Pasted into the Crit page". */
+  /** Past-tense wording once done, e.g. "Pasted them into Crit page". */
   doneLabel: string
-  /** Live detail sub-line while active, e.g. "Placing 3 frames…". */
-  activeDetail?: string
+  app?: StepApp
+  voiceNote?: VoiceNote
   /** Present when this is an "Ask each time" step: the run holds here. */
   question?: RunQuestion
   status: RunStepStatus
 }
 
-export type RunProject = {
-  id: string
-  name: string
-  steps: RunStep[]
-}
-
-export type ProjectStatus = 'queued' | 'active' | 'done'
-
 export type SummaryOutcome = 'stopped' | 'done'
 
-export type SummaryRowKind = 'done' | 'skipped' | 'stopped' | 'not-yet'
+// ── Workspace ──
 
-export type SummaryRow = {
-  projectId: string
+export type WorkflowStatus = 'on' | 'off'
+
+export type WorkflowRecord = {
+  id: string
   name: string
-  time: string
-  note?: string
-  kind: SummaryRowKind
+  schedule?: string
+  upcoming?: string
+  status: WorkflowStatus
+  runs: number
+  hoursReturned: string
+  steps: EditorStep[]
+}
+
+export type Suggestion = {
+  id: string
+  title: string
+  schedule: string
+  /** Plain-language description segments; app chip is rendered inline. */
+  descriptionBefore: string
+  app: StepApp
+  descriptionAfter: string
+  noticedLine: string
+}
+
+export type ActivityEntry = {
+  id: string
+  workflowId: string
+  name: string
+  timeLabel: string
+  group: 'coming-up' | 'today' | 'yesterday'
+  kind: 'scheduled' | 'run'
+  /** For runs. */
+  outcome?: 'done' | 'paused' | 'stopped'
+  /** Coming-up occurrences the user skipped (grayed, one-time). */
+  skipped?: boolean
 }

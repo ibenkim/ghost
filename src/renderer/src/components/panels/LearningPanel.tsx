@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkflow } from '../../state/WorkflowContext'
-import { MOCK_APPS } from '../../state/mockData'
+import { PauseButton, ChevronDown } from '../GhostPill'
 import MicIcon from '../ui/MicIcon'
 
-/** Expanded recording ledger: live step lines + voice tags + Thinking…. */
-export default function WatchingPanel() {
-  const { recordMode, selectedAppId, watchLog, setWatchExpanded, cancelRecording } =
-    useWorkflow()
+/**
+ * 3.2 — expanded recording ledger. Header: [pause] · "Learning Workflow" ·
+ * timer · chevron. Footer: Cancel (discard) · Finish (the only stop control).
+ */
+export default function LearningPanel() {
+  const {
+    watchLog,
+    setWatchExpanded,
+    cancelRecording,
+    finishRecording,
+    elapsedLabel,
+    recordPaused,
+    toggleRecordPause
+  } = useWorkflow()
   const [openVoiceIdx, setOpenVoiceIdx] = useState<number | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
-
-  const watchTarget =
-    recordMode === 'full-screen'
-      ? 'screen'
-      : MOCK_APPS.find((a) => a.id === selectedAppId)?.name ?? 'screen'
 
   // New steps append without stealing focus, but keep the latest in view.
   useEffect(() => {
@@ -21,15 +26,13 @@ export default function WatchingPanel() {
   }, [watchLog.length])
 
   return (
-    <div className="card watching-panel">
-      <div className="watching-header">
-        <span>Watching {watchTarget}..</span>
-        <button
-          className="chevron-btn"
-          onClick={() => setWatchExpanded(false)}
-          title="Collapse"
-        >
-          <ChevronUp />
+    <div className="ledger-panel">
+      <div className="ledger-header">
+        <PauseButton paused={recordPaused} onToggle={toggleRecordPause} />
+        <span className="ledger-title">Learning Workflow</span>
+        <span className="ledger-time">{elapsedLabel}</span>
+        <button className="chevron-btn" onClick={() => setWatchExpanded(false)} title="Collapse">
+          <ChevronDown />
         </button>
       </div>
 
@@ -51,7 +54,7 @@ export default function WatchingPanel() {
             </div>
             {entry.voiceNote && openVoiceIdx === i && (
               <div className="watch-voice">
-                <MicIcon size={7} />
+                <MicIcon size={8} />
                 <span className="watch-voice-text">{entry.voiceNote}</span>
               </div>
             )}
@@ -65,26 +68,23 @@ export default function WatchingPanel() {
         </div>
       </div>
 
-      <button className="watch-cancel btn-danger-text" onClick={cancelRecording}>
-        <XGlyph />
-        Cancel
-      </button>
+      <div className="ledger-footer">
+        <button className="cancel-link" onClick={cancelRecording}>
+          <XGlyph />
+          Cancel
+        </button>
+        <button className="btn-small-outline" onClick={finishRecording}>
+          Finish
+        </button>
+      </div>
     </div>
-  )
-}
-
-function ChevronUp() {
-  return (
-    <svg width="7" height="4" viewBox="0 0 7 4" fill="none" stroke="currentColor" strokeWidth="1">
-      <path d="M0.5 3.5 3.5 0.5 6.5 3.5" />
-    </svg>
   )
 }
 
 function XGlyph() {
   return (
-    <svg width="6" height="6" viewBox="0 0 6 6" stroke="currentColor" strokeWidth="1.2">
-      <path d="M0.7 0.7 5.3 5.3 M5.3 0.7 0.7 5.3" />
+    <svg width="7" height="7" viewBox="0 0 7 7" stroke="currentColor" strokeWidth="1.2">
+      <path d="M0.8 0.8 6.2 6.2 M6.2 0.8 0.8 6.2" />
     </svg>
   )
 }

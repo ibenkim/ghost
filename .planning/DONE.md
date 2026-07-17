@@ -52,6 +52,51 @@ Completed and shipped items.
       highlights the rows it will act on; Finish remaining resumes the held step
 - [x] Verified: tsc clean, electron-vite build, Electron boots
 
+## 2026-07-17 — Ghost v2: pill agent + employee workspace (reference2.md)
+
+- [x] Pill shell: mascot circle → horizontal glass pill (`GhostPill`); sizes
+      94×24 "Hello" idle · 161×24 recording · 125×24 "Editing" · 209×24
+      running; apricot border while a question holds; ghost bubble deleted
+- [x] Shell interactions: right-click native context menu (Open Library /
+      Settings / Hide pill), drag-follows-cursor (main-process cursor poll),
+      ⌥G global hotkey recovers the pill + opens the record panel
+- [x] Record panel v2: dark-glass card, Start Recording button inside the
+      panel (pill never starts recording), radio app rows, hover-grace + Esc
+      dismissal, hotkey hint on idle hover
+- [x] Recording v2: pill [pause]·"Learning..."·timer·chevron; expanded ledger
+      "Learning Workflow" with live steps, clickable voice tags, blinking
+      Thinking…, footer Cancel · Finish (the only stop control); pause lives
+      only as the pill's leading icon; all "Watching" copy purged
+- [x] Organizing v2: pill status "Thinking..." → auto-advance to editor
+- [x] Editor v2: 660×521 white panel; new TRIGGER section (schedule picker +
+      recomputing "Upcoming"); STEPS with inline app chips; fix-step choices
+      re-open via chip-token + chevron (never terminal); collapse chevron +
+      Esc → "Editing" pill with state intact; footer Cancel (confirm) · Run ·
+      Save Workflow ("Workflow saved!" pill status)
+- [x] Running v2: flat single-workflow ledger (project rows + rings removed);
+      done/done-voice/current/upcoming row states; Skip on hover for ANY
+      not-done row; amber question card holds the run and auto-expands;
+      footer Stop · Edit only; collapsed pill "name · 3/6 · 1:05"
+- [x] Summary v2: per-step rows with chevron-expandable detail, app chips +
+      voice quotes preserved; meta "Completed · 1:12" / "Stopped · 3/5 ·
+      1:12"; rose pause-bars where the run held; Run remaining (hover
+      highlights affected rows) · View log · Done
+- [x] Workspace window (807×549, r20): second BrowserWindow with hash route;
+      sidebar (traffic lights, team-menu switcher with Personal/Harry's team,
+      Workflows/Activity nav)
+- [x] Workflows home: metric header, + Record a workflow (opens desktop
+      panel via IPC), rows with On/Off status words (Off keeps schedule),
+      Suggested card ("Set it up for me" → pre-filled editor · "Record it
+      myself" · "Discard")
+- [x] Workflow detail: back arrow, meta header, Run (starts the desktop run
+      via IPC), Overview/Log tabs; reuses the editor's TriggerSection +
+      StepList verbatim — one ledger, every surface
+- [x] Activity: COMING UP / TODAY / YESTERDAY timeline; skip an occurrence
+      one at a time; run rows Done/Paused (Paused reopens the run)
+- [x] IPC bridge: workspace:open, pill run/record/editor commands, drag,
+      context menu, window close/minimize
+- [x] Verified: tsc clean, electron-vite build, Electron boots
+
 ---
 
 > Items land here once work is complete and confirmed working.

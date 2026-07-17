@@ -12,20 +12,16 @@ import {
 } from 'react'
 import type {
   AppState,
-  ProjectStatus,
   RecordMode,
-  RunProject,
+  RunStep,
   SummaryOutcome,
-  SummaryRow,
   Workflow
 } from './types'
-import { makeRunProjects, MOCK_WATCH_LOG, MOCK_WORKFLOW } from './mockData'
+import { makeRunSteps, MOCK_WATCH_LOG, MOCK_WORKFLOW } from './mockData'
 
 export type WatchEntry = { time: string; text: string; voiceNote?: string }
 
-export type OrganizingPhase = 'organizing' | 'opening'
-
-const RUN_TICK_MS = 1700
+const RUN_TICK_MS = 1800
 
 type WorkflowContextValue = {
   state: AppState
@@ -43,46 +39,49 @@ type WorkflowContextValue = {
   watchLog: WatchEntry[]
   watchExpanded: boolean
   setWatchExpanded: (v: boolean) => void
-  /** True briefly whenever a new step resolves while the ledger is collapsed. */
-  stepFlash: boolean
-  // organizing
-  organizingPhase: OrganizingPhase
   // editor
   workflow: Workflow
   setWorkflow: Dispatch<SetStateAction<Workflow>>
-  // toast pill (idle)
+  editorCollapsed: boolean
+  setEditorCollapsed: (v: boolean) => void
+  // pill status slot (idle toast)
   toast: string | null
+  // window layout
+  panelPlacement: 'above' | 'below'
+  /** True while the hover panel plays its quick fade-out (drag started). */
+  hoverFading: boolean
+  /** Measured hover-panel height so the vibrancy window hugs its content. */
+  reportHoverPanelHeight: (h: number) => void
+  // drag ↔ hover mutual exclusion
+  beginDrag: () => void
+  endDrag: () => void
   // running
-  runProjects: RunProject[]
+  runSteps: RunStep[]
   runPaused: boolean
   runCollapsed: boolean
   setRunCollapsed: (v: boolean) => void
-  isProjectExpanded: (id: string) => boolean
-  toggleProject: (id: string) => void
-  projectStatus: (p: RunProject) => ProjectStatus
-  projectProgress: (p: RunProject) => number
-  doneProjectCount: number
-  currentStepLabel: string
-  answerQuestion: (projectId: string, stepId: string, optionId: string, custom?: string) => void
+  runElapsedLabel: string
+  runDoneCount: number
+  hasQuestionHold: boolean
+  answerQuestion: (stepId: string, optionId: string, custom?: string) => void
+  skipStep: (stepId: string) => void
   // summary
   summaryOutcome: SummaryOutcome
-  summaryRows: SummaryRow[]
   summaryMeta: string
   // transitions
   openHover: () => void
   closeHover: () => void
   startRecording: () => void
   cancelRecording: () => void
-  stopRecording: () => void
-  recordAgain: () => void
+  finishRecording: () => void
+  cancelEditor: () => void
   runWorkflow: () => void
   saveWorkflow: () => void
   editFromRunning: () => void
-  togglePause: () => void
-  skipActive: () => void
+  toggleRunPause: () => void
   stopRunning: () => void
   finishSummary: () => void
-  finishRemaining: () => void
+  runRemaining: () => void
 }
 
 const WorkflowContext = createContext<WorkflowContextValue | null>(null)
@@ -95,6 +94,8 @@ function formatElapsed(totalSeconds: number): string {
 
 export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>('idle')
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const [recordMode, setRecordMode] = useState<RecordMode>('one-app')
   const [selectedAppId, setSelectedAppId] = useState('chrome')
@@ -104,20 +105,21 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [recordPaused, setRecordPaused] = useState(false)
   const [watchLog, setWatchLog] = useState<WatchEntry[]>([])
   const [watchExpanded, setWatchExpanded] = useState(false)
-  const [stepFlash, setStepFlash] = useState(false)
-
-  const [organizingPhase, setOrganizingPhase] = useState<OrganizingPhase>('organizing')
 
   const [workflow, setWorkflow] = useState<Workflow>(MOCK_WORKFLOW)
+  const [editorCollapsed, setEditorCollapsed] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  const [runProjects, setRunProjects] = useState<RunProject[]>([])
+  const [panelPlacement, setPanelPlacement] = useState<'above' | 'below'>('above')
+  const [hoverFading, setHoverFading] = useState(false)
+  const [hoverPanelH, setHoverPanelH] = useState(300)
+  /** While true, hover must not open — dragging and hovering are exclusive. */
+  const draggingRef = useRef(false)
+
+  const [runSteps, setRunSteps] = useState<RunStep[]>([])
   const [runPaused, setRunPaused] = useState(false)
   const [runCollapsed, setRunCollapsed] = useState(false)
-  /** Projects the user manually expanded/collapsed — auto behavior leaves these alone. */
-  const [expandOverrides, setExpandOverrides] = useState<Record<string, boolean>>({})
-  const [projectDurations, setProjectDurations] = useState<Record<string, number>>({})
-  const projectStartRef = useRef<Record<string, number>>({})
+  const [runElapsed, setRunElapsed] = useState(0)
   /** True when a paused run is waiting behind the editor (Edit during a run). */
   const runInFlightRef = useRef(false)
 
@@ -126,24 +128,36 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   // ── Toast auto-clear ──
   useEffect(() => {
     if (!toast) return
-    const t = setTimeout(() => setToast(null), 2000)
+    const t = setTimeout(() => setToast(null), 2200)
     return () => clearTimeout(t)
   }, [toast])
 
   // ── Sync window bounds with state ──
+  // Collapsed states size the window to the pill exactly ('pill' mode: native
+  // vibrancy blur + shadow); expanded states use 'panel' mode with padding.
   useEffect(() => {
-    const sizes: Record<AppState, { w: number; h: number }> = {
-      idle: { w: 220, h: 160 },
-      hover: { w: 320, h: 420 },
-      recording: watchExpanded ? { w: 320, h: 330 } : { w: 320, h: 170 },
-      organizing: { w: 280, h: 170 },
-      editor: { w: 380, h: 560 },
-      running: runCollapsed ? { w: 340, h: 160 } : { w: 320, h: 460 },
-      summary: { w: 380, h: 440 }
+    type Size = { w: number; h: number; mode: 'pill' | 'glass' | 'panel' }
+    // Hover ('glass') hugs its content: panel + 8px gap + 24px pill.
+    const sizes: Record<AppState, Size> = {
+      idle: { w: toast ? 140 : 94, h: 24, mode: 'pill' },
+      hover: { w: 266, h: hoverPanelH + 8 + 24, mode: 'glass' },
+      recording: watchExpanded
+        ? { w: 300, h: 330, mode: 'panel' }
+        : { w: 161, h: 24, mode: 'pill' },
+      organizing: { w: 94, h: 24, mode: 'pill' },
+      editor: editorCollapsed
+        ? { w: 125, h: 24, mode: 'pill' }
+        : { w: 700, h: 590, mode: 'panel' },
+      running: runCollapsed
+        ? { w: 230, h: 24, mode: 'pill' }
+        : { w: 490, h: 380, mode: 'panel' },
+      summary: { w: 380, h: 380, mode: 'panel' }
     }
-    const { w, h } = sizes[state]
-    window.ghostBridge?.setBounds?.(w, h)
-  }, [state, watchExpanded, runCollapsed])
+    const { w, h, mode } = sizes[state]
+    window.ghostBridge?.setBounds?.(w, h, mode)?.then((placement) => {
+      if (placement) setPanelPlacement(placement)
+    })
+  }, [state, watchExpanded, editorCollapsed, runCollapsed, toast, hoverPanelH])
 
   // ── Recording timer ──
   useEffect(() => {
@@ -152,7 +166,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t)
   }, [state, recordPaused])
 
-  // ── Streaming watch log while recording ──
+  // ── Streaming ledger while recording ──
   const watchIndexRef = useRef(0)
   useEffect(() => {
     if (state !== 'recording' || recordPaused) return
@@ -165,193 +179,102 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
         ...log,
         narrate ? entry : { time: entry.time, text: entry.text }
       ])
-      setStepFlash(true)
     }, 2600)
     return () => clearInterval(t)
   }, [state, recordPaused, narrate])
 
-  useEffect(() => {
-    if (!stepFlash) return
-    const t = setTimeout(() => setStepFlash(false), 2200)
-    return () => clearTimeout(t)
-  }, [stepFlash])
-
-  // ── Organizing: two-phase status, then auto-advance to editor ──
+  // ── Organizing ("Thinking...") → auto-advance to editor ──
   useEffect(() => {
     if (state !== 'organizing') return
-    setOrganizingPhase('organizing')
-    const t1 = setTimeout(() => setOrganizingPhase('opening'), 1300)
-    const t2 = setTimeout(() => {
+    const t = setTimeout(() => {
       setWorkflow(MOCK_WORKFLOW)
+      setEditorCollapsed(false)
       setState('editor')
-    }, 2100)
-    return () => {
-      clearTimeout(t1)
-      clearTimeout(t2)
-    }
+    }, 2000)
+    return () => clearTimeout(t)
   }, [state])
 
-  // ── Run engine ──
-  const hasQuestionHold = runProjects.some((p) =>
-    p.steps.some((s) => s.status === 'question' && s.question && s.question.answerId === null)
+  // ── Run engine (flat ledger) ──
+  const hasQuestionHold = runSteps.some(
+    (s) => s.status === 'question' && s.question?.answerId === null
   )
+
+  useEffect(() => {
+    if (state !== 'running' || runPaused) return
+    const t = setInterval(() => setRunElapsed((e) => e + 1), 1000)
+    return () => clearInterval(t)
+  }, [state, runPaused])
 
   useEffect(() => {
     if (state !== 'running' || runPaused || hasQuestionHold) return
     const t = setInterval(() => {
-      setRunProjects((projects) => advanceRun(projects))
+      setRunSteps((steps) => {
+        const next = steps.map((s) => ({ ...s }))
+        const active = next.find((s) => s.status === 'active' || s.status === 'question')
+        if (active) {
+          if (active.status === 'question' && active.question?.answerId === null) return steps
+          active.status = 'done'
+        }
+        const pending = next.find((s) => s.status === 'pending')
+        if (pending) {
+          pending.status = pending.question && pending.question.answerId === null ? 'question' : 'active'
+          if (pending.status === 'question') setRunCollapsed(false)
+        } else {
+          setSummaryOutcome('done')
+          setTimeout(() => setState('summary'), 600)
+        }
+        return next
+      })
     }, RUN_TICK_MS)
     return () => clearInterval(t)
   }, [state, runPaused, hasQuestionHold])
 
-  /** Completes the in-flight step and activates the next one. */
-  const advanceRun = useCallback((projects: RunProject[]): RunProject[] => {
-    const next = projects.map((p) => ({ ...p, steps: p.steps.map((s) => ({ ...s })) }))
-
-    for (const project of next) {
-      const active = project.steps.find((s) => s.status === 'active' || s.status === 'question')
-      if (!active) continue
-      if (active.status === 'question' && active.question?.answerId === null) return projects
-      active.status = 'done'
-      break
-    }
-
-    // Activate the next pending step anywhere in the queue.
-    for (const project of next) {
-      const pending = project.steps.find((s) => s.status === 'pending')
-      const unfinished = project.steps.some(
-        (s) => s.status === 'pending' || s.status === 'active' || s.status === 'question'
+  const answerQuestion = useCallback((stepId: string, optionId: string, custom?: string) => {
+    setRunSteps((steps) =>
+      steps.map((s) =>
+        s.id === stepId && s.question
+          ? {
+              ...s,
+              status: 'active',
+              question: { ...s.question, answerId: optionId, customValue: custom }
+            }
+          : s
       )
-      if (!unfinished) {
-        // Record the project's duration exactly once, when it finishes.
-        if (projectStartRef.current[project.id]) {
-          const secs = (Date.now() - projectStartRef.current[project.id]) / 1000
-          delete projectStartRef.current[project.id]
-          setProjectDurations((d) => ({ ...d, [project.id]: secs }))
-        }
-        continue
-      }
-      if (pending) {
-        if (!projectStartRef.current[project.id]) {
-          projectStartRef.current[project.id] = Date.now()
-        }
-        pending.status = pending.question ? 'question' : 'active'
-        if (pending.question) setRunCollapsed(false)
-        return next
-      }
-    }
-
-    // Nothing left to activate → run complete.
-    setSummaryOutcome('done')
-    setTimeout(() => setState('summary'), 600)
-    return next
+    )
   }, [])
 
-  const projectStatus = useCallback((p: RunProject): ProjectStatus => {
-    if (p.steps.some((s) => s.status === 'active' || s.status === 'question')) return 'active'
-    if (p.steps.every((s) => s.status === 'done' || s.status === 'skipped')) return 'done'
-    return 'queued'
-  }, [])
-
-  const projectProgress = useCallback((p: RunProject): number => {
-    const finished = p.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length
-    return finished / p.steps.length
-  }, [])
-
-  const isProjectExpanded = useCallback(
-    (id: string): boolean => {
-      if (id in expandOverrides) return expandOverrides[id]
-      const project = runProjects.find((p) => p.id === id)
-      if (!project) return false
-      return projectStatus(project) === 'active'
-    },
-    [expandOverrides, runProjects, projectStatus]
-  )
-
-  const toggleProject = useCallback(
-    (id: string) => {
-      setExpandOverrides((o) => ({ ...o, [id]: !isProjectExpanded(id) }))
-    },
-    [isProjectExpanded]
-  )
-
-  const answerQuestion = useCallback(
-    (projectId: string, stepId: string, optionId: string, custom?: string) => {
-      setRunProjects((projects) =>
-        projects.map((p) =>
-          p.id !== projectId
-            ? p
-            : {
-                ...p,
-                steps: p.steps.map((s) =>
-                  s.id === stepId && s.question
-                    ? {
-                        ...s,
-                        status: 'active',
-                        question: { ...s.question, answerId: optionId, customValue: custom }
-                      }
-                    : s
-                )
-              }
-        )
-      )
-    },
-    []
-  )
-
-  const doneProjectCount = runProjects.filter((p) => projectStatus(p) === 'done').length
-
-  const currentStep = runProjects
-    .flatMap((p) => p.steps)
-    .find((s) => s.status === 'active' || s.status === 'question')
-  const currentStepLabel = currentStep?.label ?? ''
-
-  // ── Summary derivation ──
-  const summaryRows: SummaryRow[] = useMemo(() => {
-    return runProjects.map((p) => {
-      const time = projectDurations[p.id]
-        ? formatElapsed(projectDurations[p.id])
-        : projectStartRef.current[p.id]
-          ? formatElapsed((Date.now() - projectStartRef.current[p.id]) / 1000)
-          : '—'
-      const held = p.steps.find((s) => s.status === 'active' || s.status === 'question')
-      if (held) {
-        return {
-          projectId: p.id,
-          name: p.name,
-          time,
-          note: `Stopped at step ${held.index} of ${p.steps.length} · ${held.label}`,
-          kind: 'stopped' as const
+  /** Skip any not-done step — including steps later than the current one. */
+  const skipStep = useCallback((stepId: string) => {
+    setRunSteps((steps) => {
+      const next = steps.map((s) => ({ ...s }))
+      const target = next.find((s) => s.id === stepId)
+      if (!target || target.status === 'done' || target.status === 'skipped') return steps
+      const wasCurrent = target.status === 'active' || target.status === 'question'
+      target.status = 'skipped'
+      if (wasCurrent) {
+        const pending = next.find((s) => s.status === 'pending')
+        if (pending) {
+          pending.status =
+            pending.question && pending.question.answerId === null ? 'question' : 'active'
+        } else {
+          setSummaryOutcome('done')
+          setTimeout(() => setState('summary'), 600)
         }
       }
-      if (p.steps.every((s) => s.status === 'pending')) {
-        return { projectId: p.id, name: p.name, time: '—', kind: 'not-yet' as const }
-      }
-      const skipped = p.steps.filter((s) => s.status === 'skipped')
-      if (skipped.length > 0) {
-        return {
-          projectId: p.id,
-          name: p.name,
-          time,
-          note: `Skipped Step ${skipped.map((s) => s.index).join(', ')}`,
-          kind: 'skipped' as const
-        }
-      }
-      return { projectId: p.id, name: p.name, time, kind: 'done' as const }
+      return next
     })
-  }, [runProjects, projectDurations])
+  }, [])
 
+  const runDoneCount = runSteps.filter(
+    (s) => s.status === 'done' || s.status === 'skipped'
+  ).length
+
+  // ── Summary meta ──
   const summaryMeta = useMemo(() => {
-    const total = runProjects.length
-    const finished = summaryRows.filter(
-      (r) => r.kind === 'done' || r.kind === 'skipped'
-    ).length
-    const totalSecs = Object.values(projectDurations).reduce((a, b) => a + b, 0)
-    const timeLabel = formatElapsed(totalSecs)
-    return summaryOutcome === 'stopped'
-      ? `Stopped · ${finished} of ${total} items · ${timeLabel}`
-      : `Done · ${finished} of ${total} items · ${timeLabel}`
-  }, [runProjects, summaryRows, projectDurations, summaryOutcome])
+    const time = formatElapsed(runElapsed)
+    if (summaryOutcome === 'done') return `Completed · ${time}`
+    return `Stopped · ${runDoneCount}/${runSteps.length} · ${time}`
+  }, [summaryOutcome, runElapsed, runDoneCount, runSteps.length])
 
   // ── Transitions ──
 
@@ -364,11 +287,32 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const openHover = useCallback(() => {
+    // Hover and drag are mutually exclusive — never open mid-drag.
+    if (draggingRef.current) return
     setState((s) => (s === 'idle' ? 'hover' : s))
   }, [])
 
   const closeHover = useCallback(() => {
     setState((s) => (s === 'hover' ? 'idle' : s))
+  }, [])
+
+  /**
+   * Drag start: hover must never fight a drag. If the panel is open it
+   * quickly fades out, then the state collapses to idle.
+   */
+  const beginDrag = useCallback(() => {
+    draggingRef.current = true
+    if (stateRef.current === 'hover') {
+      setHoverFading(true)
+      setTimeout(() => {
+        setHoverFading(false)
+        setState((s) => (s === 'hover' ? 'idle' : s))
+      }, 130)
+    }
+  }, [])
+
+  const endDrag = useCallback(() => {
+    draggingRef.current = false
   }, [])
 
   const startRecording = useCallback(() => {
@@ -382,35 +326,35 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setState('idle')
   }, [resetRecording])
 
-  const stopRecording = useCallback(() => {
+  /** "Finish" in the ledger — the only stop control. */
+  const finishRecording = useCallback(() => {
     setState('organizing')
   }, [])
 
-  const recordAgain = useCallback(() => {
+  /** Editor "Cancel" (after confirm) — discards the draft entirely. */
+  const cancelEditor = useCallback(() => {
     runInFlightRef.current = false
-    resetRecording()
-    setState('hover')
-  }, [resetRecording])
+    setState('idle')
+  }, [])
 
   const runWorkflow = useCallback(() => {
     if (runInFlightRef.current) {
-      // Resuming a run that was paused for editing — changes apply from the
-      // next step onward; completed steps are not re-run.
+      // Resuming a run paused for editing — changes apply from the next
+      // step onward; completed steps are not re-run.
       runInFlightRef.current = false
       setRunPaused(false)
+      setEditorCollapsed(false)
       setState('running')
       return
     }
-    const projects = makeRunProjects()
-    projects[0].steps[0].status = 'active'
-    projectStartRef.current = { [projects[0].id]: Date.now() }
-    setProjectDurations({})
-    setExpandOverrides({})
-    setRunProjects(projects)
+    const steps = makeRunSteps(workflow)
+    if (steps.length > 0) steps[0].status = 'active'
+    setRunSteps(steps)
     setRunPaused(false)
     setRunCollapsed(false)
+    setRunElapsed(0)
     setState('running')
-  }, [])
+  }, [workflow])
 
   const saveWorkflow = useCallback(() => {
     runInFlightRef.current = false
@@ -421,31 +365,12 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const editFromRunning = useCallback(() => {
     runInFlightRef.current = true
     setRunPaused(true)
+    setEditorCollapsed(false)
     setState('editor')
   }, [])
 
-  const togglePause = useCallback(() => {
+  const toggleRunPause = useCallback(() => {
     setRunPaused((p) => !p)
-  }, [])
-
-  const skipActive = useCallback(() => {
-    setRunProjects((projects) => {
-      const next = projects.map((p) => ({ ...p, steps: p.steps.map((s) => ({ ...s })) }))
-      for (const project of next) {
-        const active = project.steps.find(
-          (s) => s.status === 'active' || s.status === 'question'
-        )
-        if (!active) continue
-        active.status = 'skipped'
-        const pending = next
-          .flatMap((p) => p.steps)
-          .find((s) => s.status === 'pending')
-        if (pending) pending.status = pending.question ? 'question' : 'active'
-        break
-      }
-      return next
-    })
-    setRunPaused(false)
   }, [])
 
   const stopRunning = useCallback(() => {
@@ -459,11 +384,38 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setState('idle')
   }, [])
 
-  const finishRemaining = useCallback(() => {
-    // The stopped item resumes from its held step; not-yet items run in full.
+  /** "Run remaining": the stopped step resumes from where it held. */
+  const runRemaining = useCallback(() => {
     setRunPaused(false)
     setRunCollapsed(false)
     setState('running')
+  }, [])
+
+  // ── Commands from the workspace window / global hotkey ──
+  useEffect(() => {
+    const offRecord = window.ghostBridge?.onOpenRecordPanel?.(() => {
+      setState((s) => (s === 'idle' ? 'hover' : s))
+    })
+    const offRun = window.ghostBridge?.onRunWorkflow?.(() => {
+      runInFlightRef.current = false
+      const steps = makeRunSteps(MOCK_WORKFLOW)
+      if (steps.length > 0) steps[0].status = 'active'
+      setRunSteps(steps)
+      setRunPaused(false)
+      setRunCollapsed(false)
+      setRunElapsed(0)
+      setState('running')
+    })
+    const offEditor = window.ghostBridge?.onOpenEditor?.(() => {
+      setWorkflow(MOCK_WORKFLOW)
+      setEditorCollapsed(false)
+      setState('editor')
+    })
+    return () => {
+      offRecord?.()
+      offRun?.()
+      offEditor?.()
+    }
   }, [])
 
   const value: WorkflowContextValue = {
@@ -480,39 +432,40 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     watchLog,
     watchExpanded,
     setWatchExpanded,
-    stepFlash,
-    organizingPhase,
     workflow,
     setWorkflow,
+    editorCollapsed,
+    setEditorCollapsed,
     toast,
-    runProjects,
+    panelPlacement,
+    hoverFading,
+    reportHoverPanelHeight: setHoverPanelH,
+    beginDrag,
+    endDrag,
+    runSteps,
     runPaused,
     runCollapsed,
     setRunCollapsed,
-    isProjectExpanded,
-    toggleProject,
-    projectStatus,
-    projectProgress,
-    doneProjectCount,
-    currentStepLabel,
+    runElapsedLabel: formatElapsed(runElapsed),
+    runDoneCount,
+    hasQuestionHold,
     answerQuestion,
+    skipStep,
     summaryOutcome,
-    summaryRows,
     summaryMeta,
     openHover,
     closeHover,
     startRecording,
     cancelRecording,
-    stopRecording,
-    recordAgain,
+    finishRecording,
+    cancelEditor,
     runWorkflow,
     saveWorkflow,
     editFromRunning,
-    togglePause,
-    skipActive,
+    toggleRunPause,
     stopRunning,
     finishSummary,
-    finishRemaining
+    runRemaining
   }
 
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>
