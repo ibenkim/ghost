@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useWorkflow } from '../state/WorkflowContext'
 
 /**
@@ -27,34 +27,14 @@ export default function GhostPill() {
     setRunCollapsed,
     hasQuestionHold
   } = useWorkflow()
-  const [hovered, setHovered] = useState(false)
   const dragging = useRef(false)
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Hovering the idle pill opens the record panel after a short dwell —
-  // never while a drag is in progress (hover and drag are exclusive).
-  useEffect(() => {
-    if (hovered && state === 'idle' && !dragging.current) {
-      hoverTimer.current = setTimeout(() => openHover(), 500)
-      return () => {
-        if (hoverTimer.current) clearTimeout(hoverTimer.current)
-        hoverTimer.current = null
-      }
-    }
-    return undefined
-  }, [hovered, state, openHover])
 
   // A press only becomes a drag after the cursor moves past a small
-  // threshold — a plain click toggles the hover panel open/closed.
+  // threshold — a plain click toggles the record panel open/closed.
   const pressStart = useRef<{ x: number; y: number } | null>(null)
 
   function handleMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return
-    // Cancel any pending hover-open; the press decides what happens next.
-    if (hoverTimer.current) {
-      clearTimeout(hoverTimer.current)
-      hoverTimer.current = null
-    }
     pressStart.current = { x: e.clientX, y: e.clientY }
   }
 
@@ -100,9 +80,7 @@ export default function GhostPill() {
 
   const sharedProps = {
     onMouseDown: handleMouseDown,
-    onContextMenu: handleContextMenu,
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => setHovered(false)
+    onContextMenu: handleContextMenu
   }
 
   // ── Recording collapsed: [pause] · "Learning..." · 1:05 · chevron ──

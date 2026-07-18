@@ -56,13 +56,7 @@ type WorkflowContextValue = {
   hoverFading: boolean
   /** How the hover panel is dismissing — morph back into the pill, or quick drag. */
   hoverDismissMode: 'morph' | 'drag' | null
-  /**
-   * True after the user clicks the panel or drags while hover is open —
-   * cursor-leave no longer auto-dismisses. Resets on each open.
-   */
-  hoverPinned: boolean
-  pinHover: () => void
-  /** Measured hover-panel height so the vibrancy window hugs its content. */
+  /** Measured hover-panel height so the glass window hugs its content. */
   reportHoverPanelHeight: (h: number) => void
   // drag ↔ hover mutual exclusion
   /** Returns whether the drag should collapse glass → pill. */
@@ -126,7 +120,6 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [panelPlacement, setPanelPlacement] = useState<'above' | 'below'>('above')
   const [hoverFading, setHoverFading] = useState(false)
   const [hoverDismissMode, setHoverDismissMode] = useState<'morph' | 'drag' | null>(null)
-  const [hoverPinned, setHoverPinned] = useState(false)
   /** Last known full record-panel height (never a clipped close-frame measure). */
   const [hoverPanelH, setHoverPanelH] = useState(HOVER_PANEL_H)
   const hoverPanelHRef = useRef(HOVER_PANEL_H)
@@ -135,7 +128,6 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const draggingRef = useRef(false)
   /** Prevents double-triggering morph-out / drag dismiss. */
   const hoverClosingRef = useRef(false)
-  const hoverPinnedRef = useRef(false)
   const prevStateRef = useRef<AppState>(state)
   /** True while the glass open ease is running — ignore height churn mid-anim. */
   const hoverOpenAnimRef = useRef(false)
@@ -159,8 +151,8 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [toast])
 
   // ── Sync window bounds with state ──
-  // Collapsed states size the window to the pill exactly ('pill' mode: native
-  // vibrancy blur + shadow); expanded states use 'panel' mode with padding.
+  // Collapsed states size the window to the pill exactly ('pill' mode);
+  // expanded states use 'panel' mode with padding.
   useEffect(() => {
     type Size = { w: number; h: number; mode: 'pill' | 'glass' | 'panel' }
     // Hover ('glass') hugs its content: panel + 8px gap + 24px pill.
@@ -340,25 +332,16 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const openHover = useCallback(() => {
-    // Hover and drag are mutually exclusive — never open mid-drag.
+    // Opening and dragging are mutually exclusive — never open mid-drag.
     if (draggingRef.current || hoverClosingRef.current) return
     setHoverFading(false)
     setHoverDismissMode(null)
-    // Fresh open: cursor-leave dismiss is active until click or drag.
-    setHoverPinned(false)
-    hoverPinnedRef.current = false
     pendingHoverHRef.current = null
     // Repair if a previous close stored a clipped height (e.g. 81 → open to 113).
     if (hoverPanelHRef.current < HOVER_PANEL_MEASURE_MIN) {
       setHoverPanelH(HOVER_PANEL_H)
     }
     setState((s) => (s === 'idle' ? 'hover' : s))
-  }, [])
-
-  const pinHover = useCallback(() => {
-    if (stateRef.current !== 'hover') return
-    hoverPinnedRef.current = true
-    setHoverPinned(true)
   }, [])
 
   const reportHoverPanelHeight = useCallback((h: number) => {
@@ -391,27 +374,18 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setHoverFading(false)
       setHoverDismissMode(null)
-      setHoverPinned(false)
-      hoverPinnedRef.current = false
       hoverClosingRef.current = false
       setState((s) => (s === 'hover' ? 'idle' : s))
     }, 400)
   }, [])
 
   /**
-   * Drag start. While hover is open, keep the glass UI and drag it —
-   * closing is a click (no drag), same press/move threshold as opening.
+   * Drag start. While the record panel is open, keep the glass UI and drag
+   * it — closing is a click (no drag), same press/move threshold as opening.
    */
   const beginDrag = useCallback((): { collapseToPill: boolean } => {
     draggingRef.current = true
-    const onHover = stateRef.current === 'hover'
-    const collapseToPill = !onHover
-    // Dragging the open UI pins it — cursor-leave must not dismiss until reopen.
-    if (onHover) {
-      hoverPinnedRef.current = true
-      setHoverPinned(true)
-    }
-    return { collapseToPill }
+    return { collapseToPill: stateRef.current !== 'hover' }
   }, [])
 
   const endDrag = useCallback(() => {
@@ -543,8 +517,6 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     panelPlacement,
     hoverFading,
     hoverDismissMode,
-    hoverPinned,
-    pinHover,
     reportHoverPanelHeight,
     beginDrag,
     endDrag,

@@ -4,8 +4,6 @@
 .glass-card {
   background: var(--glass-panel-bg);
   border-radius: 10px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
 }
 
 .record-panel {

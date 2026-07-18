@@ -17,13 +17,11 @@ export default function GhostShell() {
     panelPlacement,
     hoverFading,
     hoverDismissMode,
-    hoverPinned,
-    pinHover,
     reportHoverPanelHeight
   } = useWorkflow()
 
-  // The hover window uses native vibrancy, so it must hug its content
-  // exactly — measure the panel and report its height for window sizing.
+  // The hover window hugs its content exactly (no padding) — measure the
+  // panel and report its height for window sizing.
   const hoverPanelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (state !== 'hover' || !hoverPanelRef.current) return
@@ -35,21 +33,11 @@ export default function GhostShell() {
   }, [state, reportHoverPanelHeight])
 
   /**
-   * Hover-panel dismissal rules:
-   * 1. A click outside the panel + pill dismisses it (window blur).
-   * 2. Cursor-leave dismisses only if the user has NOT clicked the panel or
-   *    dragged the UI this open. Pin resets every time hover opens again.
+   * Record-panel dismissal rules (panel opens only by clicking the pill):
+   * 1. Pill click again toggles it closed (handled in GhostPill).
+   * 2. A click outside the panel + pill dismisses it (window blur).
+   * 3. Esc dismisses it.
    */
-  const graceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Drag/click pin cancels a pending cursor-leave close.
-  useEffect(() => {
-    if (!hoverPinned || !graceTimer.current) return
-    clearTimeout(graceTimer.current)
-    graceTimer.current = null
-  }, [hoverPinned])
-
-  // Rule 1: click outside the UI → dismiss.
   useEffect(() => {
     if (state !== 'hover') return
     function onBlur() {
@@ -59,27 +47,7 @@ export default function GhostShell() {
     return () => window.removeEventListener('blur', onBlur)
   }, [state, closeHover])
 
-  function handleRootMouseDown(e: React.MouseEvent) {
-    if (state !== 'hover') return
-    // Pill click toggles close — only panel clicks pin via click.
-    if ((e.target as HTMLElement).closest('.pill')) return
-    pinHover()
-  }
-
-  // Rule 2: cursor leaves without pin (click/drag) → dismiss after grace.
-  function handleMouseLeave() {
-    if (state !== 'hover' || hoverFading || hoverPinned) return
-    graceTimer.current = setTimeout(closeHover, 220)
-  }
-
-  function handleMouseEnter() {
-    if (graceTimer.current) {
-      clearTimeout(graceTimer.current)
-      graceTimer.current = null
-    }
-  }
-
-  // Esc dismisses the hover panel.
+  // Esc dismisses the record panel.
   useEffect(() => {
     if (state !== 'hover') return
     function onKey(e: KeyboardEvent) {
@@ -109,12 +77,7 @@ export default function GhostShell() {
     .join(' ')
 
   return (
-    <div
-      className={rootClass}
-      onMouseLeave={handleMouseLeave}
-      onMouseEnter={handleMouseEnter}
-      onMouseDownCapture={handleRootMouseDown}
-    >
+    <div className={rootClass}>
       <div className="panel-slot">
         {state === 'hover' && (
           <div

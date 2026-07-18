@@ -5,10 +5,19 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 let pillWindow: BrowserWindow | null = null
 let workspaceWindow: BrowserWindow | null = null
+// Native-blur backdrops. Vibrancy always fills a whole window, so one window
+// behind the pill and one behind the panel give real background blur on each
+// glass shape while the gap between them stays fully transparent.
+let pillBackdrop: BrowserWindow | null = null
+let panelBackdrop: BrowserWindow | null = null
 
 const PILL_W = 94
 const PILL_H = 24
 const MARGIN = 24
+/** CSS gap between the panel slot and the pill in glass mode. */
+const GLASS_GAP = 8
+/** Backdrops sit 1px inside the CSS tint so corner radii never poke out. */
+const BACKDROP_INSET = 1
 
 const WORKSPACE_W = 807
 const WORKSPACE_H = 549
@@ -36,10 +45,6 @@ function createPillWindow() {
     hasShadow: false,
     roundedCorners: true,
     acceptFirstMouse: true,
-    vibrancy: 'hud',
-    // Keep frosted glass when the window is unfocused (clicking outside).
-    // Default 'followWindow' drops vibrancy on blur and looks opaque.
-    visualEffectState: 'active',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -51,13 +56,6 @@ function createPillWindow() {
   pillWindow.setWindowButtonVisibility(false)
   pillWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
   pillWindow.setAlwaysOnTop(true, 'floating')
-
-  // Re-assert vibrancy on blur — some macOS builds drop the material otherwise.
-  pillWindow.on('blur', () => {
-    if (pillWindow && (currentMode === 'pill' || currentMode === 'glass')) {
-      pillWindow.setVibrancy('hud')
-    }
-  })
 
   pillWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -73,6 +71,100 @@ function createPillWindow() {
   pillWindow.on('closed', () => {
     pillWindow = null
   })
+
+  // Backdrops shadow the pill window's visibility exactly.
+  pillWindow.on('hide', () => hideBackdrops())
+  pillWindow.on('show', () => {
+    if (pillWindow) layoutBackdrops(pillWindow.getBounds())
+  })
+}
+
+/**
+ * A vibrancy-only window that paints frosted blur behind one glass shape.
+ * It never takes focus or mouse events; z-order is fixed once at startup
+ * (below the pill window) and visibility is driven via opacity so showing
+ * and hiding never re-stacks windows mid-animation.
+ */
+function createBackdrop(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: PILL_W,
+    height: PILL_H,
+    show: false,
+    frame: false,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: true,
+    roundedCorners: true,
+    backgroundColor: '#00000000',
+    vibrancy: 'hud',
+    // Keep the frost when unfocused — 'followWindow' goes opaque on blur.
+    visualEffectState: 'active'
+  })
+  win.setIgnoreMouseEvents(true)
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+  win.setAlwaysOnTop(true, 'floating')
+  win.setOpacity(0)
+  win.loadURL('about:blank')
+  return win
+}
+
+function createBackdrops() {
+  pillBackdrop = createBackdrop()
+  panelBackdrop = createBackdrop()
+  pillBackdrop.showInactive()
+  panelBackdrop.showInactive()
+  // Fix stacking once: material windows sit just below the content window.
+  pillWindow?.moveTop()
+}
+
+function hideBackdrops() {
+  pillBackdrop?.setOpacity(0)
+  panelBackdrop?.setOpacity(0)
+}
+
+/**
+ * Position the blur shapes under the pill strip and the panel slot for the
+ * given pill-window bounds. Called on every window move/resize tick so the
+ * material tracks the CSS silhouettes through morphs and drags.
+ */
+function layoutBackdrops(b: Rect) {
+  if (!pillBackdrop || !panelBackdrop) return
+  if (!pillWindow || !pillWindow.isVisible() || currentMode === 'panel') {
+    hideBackdrops()
+    return
+  }
+  const inset = BACKDROP_INSET
+  const below = currentMode === 'glass' && currentPlacement === 'below'
+  const pillTop = currentMode === 'pill' || below ? b.y : b.y + b.height - PILL_HEIGHT
+  pillBackdrop.setBounds(
+    {
+      x: b.x + inset,
+      y: pillTop + inset,
+      width: Math.max(1, b.width - inset * 2),
+      height: Math.max(1, Math.min(PILL_HEIGHT, b.height) - inset * 2)
+    },
+    false
+  )
+  pillBackdrop.setOpacity(1)
+
+  const panelH = currentMode === 'glass' ? b.height - PILL_HEIGHT - GLASS_GAP : 0
+  if (panelH < 6) {
+    panelBackdrop.setOpacity(0)
+    return
+  }
+  panelBackdrop.setBounds(
+    {
+      x: b.x + inset,
+      y: (below ? b.y + PILL_HEIGHT + GLASS_GAP : b.y) + inset,
+      width: Math.max(1, b.width - inset * 2),
+      height: Math.max(1, panelH - inset * 2)
+    },
+    false
+  )
+  panelBackdrop.setOpacity(1)
 }
 
 function openWorkspaceWindow() {
@@ -113,9 +205,9 @@ function openWorkspaceWindow() {
 // resizes never derive it from live bounds (which drift mid-drag), resizes
 // are instant (animation moved the window under a stationary cursor, causing
 // the hover flicker loop), and resizes are deferred while a drag is active.
-// Modes: 'pill' and 'glass' windows hug their content and get native
-// vibrancy (real background blur); 'panel' windows are plain transparent
-// with CSS glass and content padding.
+// Modes: 'pill' and 'glass' windows hug their content; all modes are plain
+// transparent windows — the pill and panel each paint their own CSS glass,
+// so the gap between them stays fully see-through.
 type BoundsRequest = {
   w: number
   h: number
@@ -200,6 +292,12 @@ function rectFromPillAnchor(
   }
 }
 
+/** All pill-window bounds go through here so the blur backdrops track them. */
+function setPillBounds(win: BrowserWindow, rect: Rect) {
+  win.setBounds(rect, false)
+  layoutBackdrops(rect)
+}
+
 function runBoundsEase(
   win: BrowserWindow,
   from: Rect,
@@ -209,7 +307,7 @@ function runBoundsEase(
   onDone?: () => void
 ) {
   if (durationMs <= 0) {
-    win.setBounds(to, false)
+    setPillBounds(win, to)
     onDone?.()
     return
   }
@@ -217,10 +315,10 @@ function runBoundsEase(
   boundsAnimTimer = setInterval(() => {
     const u = Math.min(1, (Date.now() - t0) / durationMs)
     const e = ease(u)
-    win.setBounds(lerpRect(from, to, e), false)
+    setPillBounds(win, lerpRect(from, to, e))
     if (u >= 1) {
       cancelBoundsAnim()
-      win.setBounds(to, false)
+      setPillBounds(win, to)
       onDone?.()
     }
   }, 16)
@@ -251,16 +349,6 @@ function pillAnchorFromBounds(b: {
 
 function pillAnchorFromWindow(win: BrowserWindow): { x: number; y: number } {
   return pillAnchorFromBounds(win.getBounds())
-}
-
-function applyVibrancyForMode(win: BrowserWindow, mode: BoundsRequest['mode']) {
-  if (mode === 'pill' || mode === 'glass') {
-    win.setVibrancy('hud')
-    win.setHasShadow(true)
-  } else {
-    win.setVibrancy(null)
-    win.setHasShadow(false)
-  }
 }
 
 function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
@@ -312,8 +400,6 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
     height: prevBounds.height
   }
 
-  applyVibrancyForMode(win, req.mode)
-
   const alreadyThere =
     from.x === target.x &&
     from.y === target.y &&
@@ -321,7 +407,7 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
     from.height === target.height
 
   if (durationMs <= 0 || alreadyThere) {
-    win.setBounds(target, false)
+    setPillBounds(win, target)
   } else if (pillDrive) {
     // Pill BR fixed. Horizontal stretch is phase 1 on open / phase 2 on close.
     const opening = target.height > from.height + 4
@@ -345,7 +431,6 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
       runBoundsEase(win, from, widePill, widthMs, easeOpen, () => {
         runBoundsEase(win, widePill, target, heightMs, easeOpen, () => {
           pillDriveLock = false
-          applyVibrancyForMode(win, req.mode)
           // Apply any deferred glass size correction now that morph finished.
           if (pendingBounds && pillWindow) {
             const pending = pendingBounds
@@ -371,15 +456,12 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
       runBoundsEase(win, from, widePill, heightMs, easeClose, () => {
         runBoundsEase(win, widePill, target, widthMs, easeClose, () => {
           pillDriveLock = false
-          applyVibrancyForMode(win, req.mode)
         })
       })
     }
   } else {
     const ease = req.mode === 'pill' ? easeClose : easeOpen
-    runBoundsEase(win, from, target, durationMs, ease, () => {
-      applyVibrancyForMode(win, req.mode)
-    })
+    runBoundsEase(win, from, target, durationMs, ease)
   }
 
 
@@ -458,6 +540,7 @@ ipcMain.handle(
     win.setPosition(nx, ny)
     const bounds = win.getBounds()
     pillAnchor = pillAnchorFromBounds(bounds)
+    layoutBackdrops(bounds)
   }, 16)
   }
 )
@@ -500,6 +583,8 @@ app.whenReady().then(() => {
   })
 
   createPillWindow()
+  createBackdrops()
+  if (pillWindow) layoutBackdrops(pillWindow.getBounds())
 
   // Recovery hotkey: re-show the pill and open the record panel.
   globalShortcut.register('Alt+G', () => {
