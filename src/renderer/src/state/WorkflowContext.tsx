@@ -99,6 +99,8 @@ type WorkflowContextValue = {
   // summary
   summaryOutcome: SummaryOutcome
   summaryMeta: string
+  /** Persisted run id for the current / last summary — View log deep-link. */
+  lastRunId: string | null
   // transitions
   openHover: () => void
   closeHover: () => void
@@ -376,12 +378,15 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t)
   }, [state])
 
+  const [lastRunId, setLastRunId] = useState<string | null>(null)
+
   // ── Persist Run when entering summary ──
   useEffect(() => {
     if (state !== 'summary') return
     const active = activeRunRef.current
     if (!active || runPersistedRef.current) return
     runPersistedRef.current = true
+    setLastRunId(active.id)
     const record = buildRunRecord(
       active,
       runStepsRef.current,
@@ -783,10 +788,16 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       setEditorCollapsed(false)
       setState('editor')
     })
+    const offReveal = window.ghostBridge?.onRevealRunning?.(() => {
+      if (stateRef.current === 'running') {
+        setRunCollapsed(false)
+      }
+    })
     return () => {
       offRecord?.()
       offRun?.()
       offEditor?.()
+      offReveal?.()
     }
   }, [beginRun])
 
@@ -830,6 +841,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     skipStep,
     summaryOutcome,
     summaryMeta,
+    lastRunId,
     openHover,
     closeHover,
     startRecording,

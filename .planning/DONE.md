@@ -52,6 +52,17 @@ Completed and shipped items.
 - [x] Phase 1 shipped as needed: status-pill, run-card, native context-menu
 - [x] Verified: `tsc`, `electron-vite build`
 
+## 2026-07-19 — Phase 3 Employee Workspace (v3)
+
+- [x] `WorkspaceApp` subscribed to shared store; home count + hours metric from list/runs
+- [x] Workflow detail ⋯ menu: Rename · Duplicate · Move to folder (stub) · Copy share link (stub) · Turn off · Delete…
+- [x] Delete confirm over scrim; deletes workflow, keeps `Run` records
+- [x] Trigger editor reused from Phase 2 (`TriggerSection` + `onTurnOff`)
+- [x] Log tab + run detail backed by persisted `Run`s (seed history included)
+- [x] Activity COMING UP from schedule model; skip persists; needs-you Answer/Help → `pill:revealRunning`
+- [x] Summary “View log” + Activity Done → run detail deep-link
+- [x] Verified: `tsc`, `electron-vite build`
+
 ---
 
 > Items land here once work is complete and confirmed working.

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
-import { MOCK_ACTIVITY, MOCK_SUGGESTION, MOCK_WORKFLOW_RECORDS } from '../state/mockData'
-import type { ActivityEntry, Workflow } from '../state/types'
+import { newId } from '../../../shared/id'
+import { hoursReturnedThisMonth } from '../../../shared/runFormat'
+import type {
+  ActivityEntry,
+  Run,
+  StoreSnapshot,
+  Suggestion,
+  Workflow,
+  WorkspaceFocus
+} from '../state/types'
 import Sidebar from './Sidebar'
 import WorkflowsHome from './WorkflowsHome'
 import WorkflowDetail from './WorkflowDetail'
@@ -11,63 +19,143 @@ export type WorkspaceNav = 'workflows' | 'activity'
 export type Space = 'Personal' | "Harry's team"
 
 /**
- * The employee-side workspace window: sidebar (Workflows / Activity +
- * team-menu) and content views. 807×549, white, r20.
- *
- * Phase 0 keeps local mock state; Phase 3's first task wires this to the
- * shared main-process store.
+ * Employee Workspace — subscribed to the shared main-process store.
+ * Desktop pill mutations broadcast via `store:changed` keep this in sync.
  */
 export default function WorkspaceApp() {
   const [nav, setNav] = useState<WorkspaceNav>('workflows')
   const [space, setSpace] = useState<Space>('Personal')
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [focusRunId, setFocusRunId] = useState<string | null>(null)
+  const [editStepId, setEditStepId] = useState<string | null>(null)
 
-  const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOW_RECORDS)
-  const [suggestion, setSuggestion] = useState(MOCK_SUGGESTION as typeof MOCK_SUGGESTION | null)
-  const [activity, setActivity] = useState<ActivityEntry[]>(MOCK_ACTIVITY)
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const [runs, setRuns] = useState<Run[]>([])
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [ready, setReady] = useState(false)
 
-  // Deep-link from the teal "Open in Library" saved pill (Phase 2).
+  function applySnapshot(snap: StoreSnapshot) {
+    setWorkflows(snap.workflows)
+    setRuns(snap.runs)
+    setSuggestion(snap.suggestion)
+    setActivity(snap.activity)
+    setReady(true)
+  }
+
   useEffect(() => {
-    return window.ghostBridge?.onFocusWorkflow?.((workflowId) => {
-      setNav('workflows')
-      setSpace('Personal')
-      setDetailId(workflowId)
-      // If the workflow was just saved and isn't in the local mock list yet,
-      // pull it from the shared store so the detail view can open.
-      window.ghostBridge?.getWorkflow?.(workflowId).then((wf) => {
-        if (!wf) return
-        setWorkflows((ws) => {
-          if (ws.some((w) => w.id === wf.id)) {
-            return ws.map((w) => (w.id === wf.id ? wf : w))
-          }
-          return [wf, ...ws]
-        })
-      })
+    let cancelled = false
+    window.ghostBridge?.getSnapshot?.().then((snap) => {
+      if (!cancelled && snap) applySnapshot(snap)
     })
+    const off = window.ghostBridge?.onStoreChanged?.(applySnapshot)
+    return () => {
+      cancelled = true
+      off?.()
+    }
   }, [])
 
-  // Selecting a space filters the whole workspace; the mock keeps personal
-  // data in "Personal" and shows an empty team space.
+  // Deep-link from saved pill / View log / Activity Done.
+  useEffect(() => {
+    async function applyFocus(focus: WorkspaceFocus) {
+      setNav('workflows')
+      setSpace('Personal')
+      if (focus.runId) {
+        let workflowId = focus.workflowId
+        if (!workflowId) {
+          const run = await window.ghostBridge?.getRun?.(focus.runId)
+          workflowId = run?.workflowId
+        }
+        if (workflowId) setDetailId(workflowId)
+        setFocusRunId(focus.runId)
+        return
+      }
+      if (focus.workflowId) {
+        setDetailId(focus.workflowId)
+        setFocusRunId(null)
+      }
+    }
+
+    const offFocus = window.ghostBridge?.onFocusWorkspace?.(applyFocus)
+    const offLegacy = window.ghostBridge?.onFocusWorkflow?.((workflowId) => {
+      void applyFocus({ workflowId })
+    })
+    return () => {
+      offFocus?.()
+      offLegacy?.()
+    }
+  }, [])
+
   const spaceWorkflows = space === 'Personal' ? workflows : []
   const spaceActivity = space === 'Personal' ? activity : []
+  const spaceRuns = space === 'Personal' ? runs : []
 
   const detail = detailId ? workflows.find((w) => w.id === detailId) ?? null : null
 
-  function updateWorkflow(id: string, updater: (w: Workflow) => Workflow) {
-    setWorkflows((ws) => ws.map((w) => (w.id === id ? updater(w) : w)))
+  async function persistWorkflow(next: Workflow) {
+    await window.ghostBridge?.upsertWorkflow?.(next)
   }
 
-  function skipOccurrence(entryId: string) {
-    setActivity((a) => a.map((e) => (e.id === entryId ? { ...e, skipped: true } : e)))
+  async function updateWorkflow(id: string, updater: (w: Workflow) => Workflow) {
+    const current = workflows.find((w) => w.id === id)
+    if (!current) return
+    await persistWorkflow(updater(current))
+  }
+
+  async function skipOccurrence(entryId: string) {
+    await window.ghostBridge?.skipActivity?.(entryId)
+  }
+
+  async function discardSuggestion() {
+    if (!suggestion) return
+    await window.ghostBridge?.discardSuggestion?.(suggestion.id)
+  }
+
+  async function duplicateWorkflow(id: string) {
+    const source = workflows.find((w) => w.id === id)
+    if (!source) return
+    const copy: Workflow = {
+      ...source,
+      id: newId('wf'),
+      name: `Copy of ${source.name}`,
+      status: 'off',
+      runCount: 0,
+      hoursReturned: '≈ 0 h returned total',
+      steps: source.steps.map((s) => ({
+        ...s,
+        id: newId('s'),
+        fix: s.fix ? { ...s.fix, options: [...s.fix.options] } : undefined
+      })),
+      trigger: {
+        ...source.trigger,
+        cadence: source.trigger.cadence ? { ...source.trigger.cadence } : undefined
+      }
+    }
+    await persistWorkflow(copy)
+    setDetailId(copy.id)
+    setFocusRunId(null)
+  }
+
+  async function deleteWorkflow(id: string) {
+    await window.ghostBridge?.deleteWorkflow?.(id)
+    setDetailId(null)
+    setFocusRunId(null)
+  }
+
+  if (!ready) {
+    return <div className="workspace-window" />
   }
 
   return (
     <div className="workspace-window">
+      <div className="ws-drag-strip" aria-hidden="true" />
       <Sidebar
         nav={nav}
         onNav={(n) => {
           setNav(n)
           setDetailId(null)
+          setFocusRunId(null)
+          setEditStepId(null)
         }}
         space={space}
         onSpace={setSpace}
@@ -76,18 +164,40 @@ export default function WorkspaceApp() {
         {detail ? (
           <WorkflowDetail
             workflow={detail}
-            onBack={() => setDetailId(null)}
+            runs={spaceRuns.filter((r) => r.workflowId === detail.id)}
+            initialRunId={focusRunId}
+            initialEditStepId={editStepId}
+            onBack={() => {
+              setDetailId(null)
+              setFocusRunId(null)
+              setEditStepId(null)
+            }}
             onUpdate={(updater) => updateWorkflow(detail.id, updater)}
+            onDuplicate={() => duplicateWorkflow(detail.id)}
+            onDelete={() => deleteWorkflow(detail.id)}
+            onOpenActivity={() => {
+              setDetailId(null)
+              setFocusRunId(null)
+              setNav('activity')
+            }}
+            onFixStep={(stepId) => {
+              setFocusRunId(null)
+              setEditStepId(stepId)
+            }}
           />
         ) : nav === 'workflows' ? (
           <WorkflowsHome
             workflows={spaceWorkflows}
+            hoursLine={hoursReturnedThisMonth(spaceRuns)}
             suggestion={space === 'Personal' ? suggestion : null}
-            onOpen={(id) => setDetailId(id)}
+            onOpen={(id) => {
+              setDetailId(id)
+              setFocusRunId(null)
+            }}
             onToggleStatus={(id) =>
               updateWorkflow(id, (w) => ({ ...w, status: w.status === 'on' ? 'off' : 'on' }))
             }
-            onDiscardSuggestion={() => setSuggestion(null)}
+            onDiscardSuggestion={discardSuggestion}
           />
         ) : (
           <ActivityView
@@ -95,8 +205,15 @@ export default function WorkspaceApp() {
             onOpenWorkflow={(id) => {
               setNav('workflows')
               setDetailId(id)
+              setFocusRunId(null)
+            }}
+            onOpenRun={(workflowId, runId) => {
+              setNav('workflows')
+              setDetailId(workflowId)
+              setFocusRunId(runId)
             }}
             onSkip={skipOccurrence}
+            onAnswerHold={() => window.ghostBridge?.revealRunning?.()}
           />
         )}
       </div>

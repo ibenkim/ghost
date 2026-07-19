@@ -6,7 +6,8 @@ import type {
   Run,
   StoreSnapshot,
   Suggestion,
-  Workflow
+  Workflow,
+  WorkspaceFocus
 } from '../shared/types'
 
 type ActivityHoldPayload = {
@@ -34,9 +35,9 @@ const ghostBridge = {
       durationMs: opts?.durationMs,
       pillDrive: opts?.pillDrive
     }),
-  /** Open (or focus) the workspace window; optional deep-link to a workflow. */
-  openWorkspace: (focusWorkflowId?: string) =>
-    ipcRenderer.invoke('workspace:open', focusWorkflowId),
+  /** Open (or focus) the workspace window; optional deep-link to a workflow / run. */
+  openWorkspace: (focus?: string | WorkspaceFocus) =>
+    ipcRenderer.invoke('workspace:open', focus),
   /** Close the calling window. */
   closeWindow: () => ipcRenderer.invoke('window:close'),
   /** Minimize the calling window. */
@@ -57,6 +58,8 @@ const ghostBridge = {
   openRecordPanel: () => ipcRenderer.invoke('pill:openRecordPanel'),
   /** Workspace → pill: open the editor pre-filled (Suggested "Set it up for me"). */
   openEditor: () => ipcRenderer.invoke('pill:openEditor'),
+  /** Activity Answer / paused hold — show pill + expand running panel. */
+  revealRunning: () => ipcRenderer.invoke('pill:revealRunning'),
   /** Pill-side subscriptions for commands sent from the workspace / hotkey. */
   onRunWorkflow: (cb: (workflowId: string) => void) => {
     const listener = (_e: unknown, id: string) => cb(id)
@@ -73,19 +76,33 @@ const ghostBridge = {
     ipcRenderer.on('pill:openEditor', listener)
     return () => ipcRenderer.removeListener('pill:openEditor', listener)
   },
-  /** Workspace: deep-link to a workflow detail (Phase 3 consumes). */
+  onRevealRunning: (cb: () => void) => {
+    const listener = () => cb()
+    ipcRenderer.on('pill:revealRunning', listener)
+    return () => ipcRenderer.removeListener('pill:revealRunning', listener)
+  },
+  /** Workspace: deep-link to a workflow detail (legacy). */
   onFocusWorkflow: (cb: (workflowId: string) => void) => {
     const listener = (_e: unknown, id: string) => cb(id)
     ipcRenderer.on('workspace:focusWorkflow', listener)
     return () => ipcRenderer.removeListener('workspace:focusWorkflow', listener)
+  },
+  /** Workspace: deep-link to workflow and/or run detail. */
+  onFocusWorkspace: (cb: (focus: WorkspaceFocus) => void) => {
+    const listener = (_e: unknown, focus: WorkspaceFocus) => cb(focus)
+    ipcRenderer.on('workspace:focus', listener)
+    return () => ipcRenderer.removeListener('workspace:focus', listener)
   },
 
   // ── Shared data store ──
   getSnapshot: (): Promise<StoreSnapshot> => ipcRenderer.invoke('store:getSnapshot'),
   getWorkflow: (id: string): Promise<Workflow | null> =>
     ipcRenderer.invoke('store:getWorkflow', id),
+  getRun: (id: string): Promise<Run | null> => ipcRenderer.invoke('store:getRun', id),
   upsertWorkflow: (workflow: Workflow): Promise<StoreSnapshot> =>
     ipcRenderer.invoke('store:upsertWorkflow', workflow),
+  deleteWorkflow: (id: string): Promise<StoreSnapshot> =>
+    ipcRenderer.invoke('store:deleteWorkflow', id),
   saveRun: (run: Run): Promise<StoreSnapshot> => ipcRenderer.invoke('store:saveRun', run),
   upsertActivityHold: (payload: ActivityHoldPayload): Promise<StoreSnapshot> =>
     ipcRenderer.invoke('store:upsertActivityHold', payload),

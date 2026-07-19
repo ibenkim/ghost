@@ -5,19 +5,19 @@ import AppChip from '../components/shared/AppChip'
 /** 1.2–1.4 — Workflows home: metric header, rows with On/Off, Suggested card. */
 export default function WorkflowsHome({
   workflows,
+  hoursLine,
   suggestion,
   onOpen,
   onToggleStatus,
   onDiscardSuggestion
 }: {
   workflows: Workflow[]
+  hoursLine: string
   suggestion: Suggestion | null
   onOpen: (id: string) => void
   onToggleStatus: (id: string) => void
   onDiscardSuggestion: () => void
 }) {
-  const hoursLine = workflows.length > 0 ? '5.2 h returned this month' : 'Nothing here yet'
-
   return (
     <div className="ws-view">
       <div className="ws-header">

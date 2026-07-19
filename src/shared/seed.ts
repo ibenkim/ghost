@@ -1,7 +1,10 @@
+import { mergeComingUp } from './activity'
 import type {
   ActivityEntry,
   EditorStep,
   RecordSettings,
+  Run,
+  RunStepResult,
   StoreSnapshot,
   Suggestion,
   Weekday,
@@ -128,26 +131,163 @@ export const SEED_SUGGESTION: Suggestion = {
   noticedLine: 'Noticed — you’ve done this 3 Fridays in a row  ·  ≈ 25 min each'
 }
 
+function stepResults(
+  baseIso: string,
+  labels: { label: string; doneLabel: string; status: RunStepResult['status']; offsetSec: number }[]
+): RunStepResult[] {
+  const base = Date.parse(baseIso)
+  return labels.map((s, i) => {
+    const at =
+      s.status === 'pending' || s.status === 'active'
+        ? undefined
+        : new Date(base + s.offsetSec * 1000).toISOString()
+    return {
+      stepId: `s${i + 1}`,
+      index: i + 1,
+      label: s.label,
+      doneLabel: s.doneLabel,
+      status: s.status,
+      startedAt: at,
+      endedAt: at
+    }
+  })
+}
+
+/** Sample Log history for Monthly client report (w1). */
+export const SEED_RUNS: Run[] = [
+  {
+    id: 'run_seed_jul1',
+    workflowId: 'w1',
+    startedAt: '2026-07-01T09:00:00.000',
+    endedAt: '2026-07-01T09:01:12.000',
+    outcome: 'done',
+    returnedMinutes: 38,
+    questions: [],
+    steps: stepResults('2026-07-01T09:00:00.000', [
+      { label: 'Open Q3 Onboarding in Figma', doneLabel: 'Opened Q3 Onboarding in Figma', status: 'done', offsetSec: 2 },
+      { label: 'Duplicate frames', doneLabel: 'Duplicated 4 updated frames', status: 'done', offsetSec: 11 },
+      { label: 'Paste into Crit', doneLabel: 'Pasted them into Crit page', status: 'done', offsetSec: 38 },
+      { label: 'Title section', doneLabel: 'Titled the new section “Crit – Jul 1”', status: 'done', offsetSec: 51 },
+      { label: 'Copy link', doneLabel: 'Copied the Crit page link', status: 'done', offsetSec: 64 },
+      { label: 'Send to Slack', doneLabel: 'Sent it to #design-crit', status: 'done', offsetSec: 72 }
+    ]),
+    artifactLinks: [{ label: 'View message in Slack ↗', url: 'https://slack.com' }]
+  },
+  {
+    id: 'run_seed_jun24',
+    workflowId: 'w1',
+    startedAt: '2026-06-24T09:00:00.000',
+    endedAt: '2026-06-24T09:01:20.000',
+    outcome: 'done',
+    returnedMinutes: 36,
+    questions: [
+      {
+        stepId: 's4',
+        prompt: 'Which title should I use?',
+        answerId: 'todays-date',
+        answerLabel: "Today's date",
+        answeredAt: '2026-06-24T09:00:51.000'
+      }
+    ],
+    steps: stepResults('2026-06-24T09:00:00.000', [
+      { label: 'Open Q3 Onboarding in Figma', doneLabel: 'Opened Q3 Onboarding in Figma', status: 'done', offsetSec: 2 },
+      { label: 'Duplicate frames', doneLabel: 'Duplicated 4 updated frames', status: 'done', offsetSec: 11 },
+      { label: 'Paste into Crit', doneLabel: 'Pasted them into Crit page', status: 'done', offsetSec: 38 },
+      { label: 'Title section', doneLabel: 'Titled the new section “Crit – Jul 8”', status: 'done', offsetSec: 51 },
+      { label: 'Copy link', doneLabel: 'Copied the Crit page link', status: 'done', offsetSec: 64 },
+      { label: 'Send to Slack', doneLabel: 'Sent it to #design-crit', status: 'done', offsetSec: 80 }
+    ]),
+    artifactLinks: [{ label: 'View message in Slack ↗', url: 'https://slack.com' }]
+  },
+  {
+    id: 'run_seed_jun17',
+    workflowId: 'w1',
+    startedAt: '2026-06-17T09:00:00.000',
+    endedAt: '2026-06-17T09:00:44.000',
+    outcome: 'stopped',
+    stopReason: 'Stopped — needed help at step 3',
+    questions: [],
+    steps: stepResults('2026-06-17T09:00:00.000', [
+      { label: 'Open Q3 Onboarding in Figma', doneLabel: 'Opened Q3 Onboarding in Figma', status: 'done', offsetSec: 2 },
+      { label: 'Duplicate frames', doneLabel: 'Duplicated 4 updated frames', status: 'done', offsetSec: 11 },
+      { label: 'Paste into Crit', doneLabel: 'Pasted them into Crit page', status: 'held', offsetSec: 38 },
+      { label: 'Title section', doneLabel: 'Title the new section', status: 'pending', offsetSec: 0 },
+      { label: 'Copy link', doneLabel: 'Copy the Crit page link', status: 'pending', offsetSec: 0 },
+      { label: 'Send to Slack', doneLabel: 'Send to #design-crit', status: 'pending', offsetSec: 0 }
+    ])
+  },
+  {
+    id: 'run_seed_jun10',
+    workflowId: 'w1',
+    startedAt: '2026-06-10T09:00:00.000',
+    endedAt: '2026-06-10T09:01:09.000',
+    outcome: 'done',
+    returnedMinutes: 38,
+    questions: [],
+    steps: stepResults('2026-06-10T09:00:00.000', [
+      { label: 'Open Q3 Onboarding in Figma', doneLabel: 'Opened Q3 Onboarding in Figma', status: 'done', offsetSec: 2 },
+      { label: 'Duplicate frames', doneLabel: 'Duplicated 4 updated frames', status: 'done', offsetSec: 11 },
+      { label: 'Paste into Crit', doneLabel: 'Pasted them into Crit page', status: 'done', offsetSec: 38 },
+      { label: 'Title section', doneLabel: 'Titled the new section', status: 'done', offsetSec: 51 },
+      { label: 'Copy link', doneLabel: 'Copied the Crit page link', status: 'done', offsetSec: 64 },
+      { label: 'Send to Slack', doneLabel: 'Sent it to #design-crit', status: 'done', offsetSec: 69 }
+    ]),
+    artifactLinks: [{ label: 'View message in Slack ↗', url: 'https://slack.com' }]
+  },
+  {
+    id: 'run_seed_today_w1',
+    workflowId: 'w1',
+    startedAt: '2026-07-19T09:00:00.000',
+    endedAt: '2026-07-19T09:01:12.000',
+    outcome: 'done',
+    returnedMinutes: 38,
+    questions: [],
+    steps: stepResults('2026-07-19T09:00:00.000', [
+      { label: 'Open Q3 Onboarding in Figma', doneLabel: 'Opened Q3 Onboarding in Figma', status: 'done', offsetSec: 2 },
+      { label: 'Duplicate frames', doneLabel: 'Duplicated 4 updated frames', status: 'done', offsetSec: 11 },
+      { label: 'Paste into Crit', doneLabel: 'Pasted them into Crit page', status: 'done', offsetSec: 38 },
+      { label: 'Title section', doneLabel: 'Titled the new section', status: 'done', offsetSec: 51 },
+      { label: 'Copy link', doneLabel: 'Copied the Crit page link', status: 'done', offsetSec: 64 },
+      { label: 'Send to Slack', doneLabel: 'Sent it to #design-crit', status: 'done', offsetSec: 72 }
+    ])
+  },
+  {
+    id: 'run_seed_today_w3',
+    workflowId: 'w3',
+    startedAt: '2026-07-19T16:30:00.000',
+    endedAt: '2026-07-19T16:30:40.000',
+    outcome: 'done',
+    returnedMinutes: 22,
+    questions: [],
+    steps: stepResults('2026-07-19T16:30:00.000', [
+      { label: 'Open invoices', doneLabel: 'Opened invoices', status: 'done', offsetSec: 5 },
+      { label: 'Send reminders', doneLabel: 'Sent reminders', status: 'done', offsetSec: 25 },
+      { label: 'Log results', doneLabel: 'Logged results', status: 'done', offsetSec: 40 }
+    ])
+  },
+  {
+    id: 'run_seed_yesterday_w2',
+    workflowId: 'w2',
+    startedAt: '2026-07-18T16:30:00.000',
+    endedAt: '2026-07-18T16:30:48.000',
+    outcome: 'done',
+    returnedMinutes: 18,
+    questions: [],
+    steps: stepResults('2026-07-18T16:30:00.000', [
+      { label: 'Create folder', doneLabel: 'Created folder', status: 'done', offsetSec: 10 },
+      { label: 'Add templates', doneLabel: 'Added templates', status: 'done', offsetSec: 30 },
+      { label: 'Share link', doneLabel: 'Shared link', status: 'done', offsetSec: 48 },
+      { label: 'Notify team', doneLabel: 'Notified team', status: 'done', offsetSec: 48 }
+    ])
+  }
+]
+
+/** Historical run rows only — COMING UP is generated from the schedule model. */
 export const SEED_ACTIVITY: ActivityEntry[] = [
   {
-    id: 'a1',
-    workflowId: 'w3',
-    name: 'Invoice reminders',
-    timeLabel: 'Tomorrow 9:00 A.M.',
-    group: 'coming-up',
-    kind: 'scheduled'
-  },
-  {
-    id: 'a2',
+    id: 'act_run_seed_today_w1',
     workflowId: 'w1',
-    name: 'Monthly client report',
-    timeLabel: 'August 1, 4:30 P.M.',
-    group: 'coming-up',
-    kind: 'scheduled'
-  },
-  {
-    id: 'a3',
-    workflowId: 'w1',
+    runId: 'run_seed_today_w1',
     name: 'Monthly client report',
     timeLabel: '9:00 A.M.',
     group: 'today',
@@ -155,8 +295,9 @@ export const SEED_ACTIVITY: ActivityEntry[] = [
     outcome: 'done'
   },
   {
-    id: 'a4',
+    id: 'act_run_seed_today_w3',
     workflowId: 'w3',
+    runId: 'run_seed_today_w3',
     name: 'Invoice Reminders',
     timeLabel: '4:30 P.M.',
     group: 'today',
@@ -164,17 +305,9 @@ export const SEED_ACTIVITY: ActivityEntry[] = [
     outcome: 'done'
   },
   {
-    id: 'a5',
+    id: 'act_run_seed_yesterday_w2',
     workflowId: 'w2',
-    name: 'Weekly crit prep',
-    timeLabel: '2:10 P.M.',
-    group: 'today',
-    kind: 'run',
-    outcome: 'paused'
-  },
-  {
-    id: 'a6',
-    workflowId: 'w2',
+    runId: 'run_seed_yesterday_w2',
     name: 'New-client folder setup',
     timeLabel: '4:30 P.M.',
     group: 'yesterday',
@@ -191,15 +324,25 @@ export const DEFAULT_RECORD_SETTINGS: RecordSettings = {
 
 /** First-run seed only — subsequent launches load persisted JSON. */
 export function createSeedSnapshot(): StoreSnapshot {
+  const workflows = SEED_WORKFLOWS.map((w) => ({
+    ...w,
+    steps: w.steps.map((s) => ({ ...s })),
+    trigger: { ...w.trigger, cadence: w.trigger.cadence ? { ...w.trigger.cadence } : undefined }
+  }))
+  const activity = mergeComingUp(
+    SEED_ACTIVITY.map((a) => ({ ...a })),
+    workflows
+  )
   return {
     version: 1,
-    workflows: SEED_WORKFLOWS.map((w) => ({
-      ...w,
-      steps: w.steps.map((s) => ({ ...s })),
-      trigger: { ...w.trigger, cadence: w.trigger.cadence ? { ...w.trigger.cadence } : undefined }
+    workflows,
+    runs: SEED_RUNS.map((r) => ({
+      ...r,
+      steps: r.steps.map((s) => ({ ...s })),
+      questions: r.questions.map((q) => ({ ...q })),
+      artifactLinks: r.artifactLinks?.map((a) => ({ ...a }))
     })),
-    runs: [],
-    activity: SEED_ACTIVITY.map((a) => ({ ...a })),
+    activity,
     suggestion: { ...SEED_SUGGESTION },
     discardedSuggestionIds: [],
     recordSettings: { ...DEFAULT_RECORD_SETTINGS },

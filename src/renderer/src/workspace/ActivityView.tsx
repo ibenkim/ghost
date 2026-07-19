@@ -1,3 +1,6 @@
+import {
+  formatWaitingSince
+} from '../../../shared/runFormat'
 import type { ActivityEntry } from '../state/types'
 import { ChevronRight } from './WorkflowsHome'
 
@@ -8,18 +11,21 @@ const GROUPS: { key: ActivityEntry['group']; label: string }[] = [
 ]
 
 /**
- * 02 — Activity: a timeline grouped COMING UP / TODAY / YESTERDAY.
- * Scheduled occurrences can be skipped one at a time; runs record their
- * outcome even when the workspace was never opened.
+ * 02 — Activity: COMING UP from the schedule model, TODAY / YESTERDAY from
+ * persisted runs + live needs-you holds mirrored from the pill.
  */
 export default function ActivityView({
   entries,
   onOpenWorkflow,
-  onSkip
+  onOpenRun,
+  onSkip,
+  onAnswerHold
 }: {
   entries: ActivityEntry[]
   onOpenWorkflow: (workflowId: string) => void
+  onOpenRun: (workflowId: string, runId: string) => void
   onSkip: (entryId: string) => void
+  onAnswerHold: () => void
 }) {
   const scheduledCount = new Set(
     entries.filter((e) => e.kind === 'scheduled' && !e.skipped).map((e) => e.workflowId)
@@ -45,8 +51,17 @@ export default function ActivityView({
                 <ActivityRow
                   key={entry.id}
                   entry={entry}
-                  onOpen={() => onOpenWorkflow(entry.workflowId)}
+                  onOpen={() => {
+                    if (entry.kind === 'run' && entry.runId && entry.outcome === 'done') {
+                      onOpenRun(entry.workflowId, entry.runId)
+                    } else if (entry.needsYou || entry.outcome === 'paused') {
+                      onAnswerHold()
+                    } else {
+                      onOpenWorkflow(entry.workflowId)
+                    }
+                  }}
                   onSkip={() => onSkip(entry.id)}
+                  onAnswer={onAnswerHold}
                 />
               ))}
             </div>
@@ -60,13 +75,59 @@ export default function ActivityView({
 function ActivityRow({
   entry,
   onOpen,
-  onSkip
+  onSkip,
+  onAnswer
 }: {
   entry: ActivityEntry
   onOpen: () => void
   onSkip: () => void
+  onAnswer: () => void
 }) {
   const isScheduled = entry.kind === 'scheduled'
+  const needsAnswer = entry.needsYou === 'answer'
+  const needsHelp = entry.needsYou === 'help'
+  const stoppedHelp = Boolean(entry.stopReason) && entry.outcome === 'stopped'
+
+  if (needsAnswer || needsHelp) {
+    const since = formatWaitingSince(entry.waitingSince)
+    const line = needsHelp
+      ? `${entry.name} · needs help${entry.heldStepIndex ? ` at step ${entry.heldStepIndex}` : ''}`
+      : `${entry.name} · waiting on your answer since ${since}`
+    return (
+      <div
+        className={`ws-row activity-row ${needsHelp ? 'activity-row-help' : 'activity-row-needs'}`}
+        onClick={onOpen}
+      >
+        <span className="ws-row-name activity-needs-text">{line}</span>
+        <span className="ws-row-right">
+          <button
+            className={`status-chip ${needsHelp ? 'status-chip-help' : 'status-chip-answer'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onAnswer()
+            }}
+          >
+            {needsHelp ? 'Help' : 'Answer'}
+          </button>
+          <ChevronRight />
+        </span>
+      </div>
+    )
+  }
+
+  if (stoppedHelp) {
+    return (
+      <div className="ws-row activity-row activity-row-help" onClick={onOpen}>
+        <span className="ws-row-name activity-needs-text">
+          {entry.name} · {entry.stopReason}
+        </span>
+        <span className="ws-row-right">
+          <ChevronRight />
+        </span>
+      </div>
+    )
+  }
+
   const highlight = isScheduled && !entry.skipped
 
   return (
@@ -76,10 +137,7 @@ function ActivityRow({
       }`}
       onClick={onOpen}
     >
-      <span className={`ws-row-name ${entry.skipped || entry.kind === 'run' ? '' : ''} ${
-        entry.skipped ? 'ws-row-name-off' : ''
-      }`}
-      >
+      <span className={`ws-row-name ${entry.skipped || entry.kind === 'run' ? 'ws-row-name-off' : ''}`}>
         {entry.name}
         <span className="ws-row-schedule">  ·  {entry.timeLabel}</span>
       </span>
@@ -106,8 +164,7 @@ function ActivityRow({
             className="status-chip status-chip-paused"
             onClick={(e) => {
               e.stopPropagation()
-              // Reopens the running panel at the held step.
-              window.ghostBridge?.runWorkflow?.(entry.workflowId)
+              onAnswer()
             }}
           >
             Paused

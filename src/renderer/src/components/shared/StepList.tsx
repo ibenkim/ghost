@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EditorStep } from '../../state/types'
 import AppChip from './AppChip'
 import MicIcon from '../ui/MicIcon'
@@ -23,6 +23,8 @@ export function Transcript({ text }: { text: string }) {
 type StepListProps = {
   steps: EditorStep[]
   onChange: (updater: (steps: EditorStep[]) => EditorStep[]) => void
+  /** Deep-link from run detail "fix a step" — opens that row in edit mode. */
+  initialEditStepId?: string | null
 }
 
 /**
@@ -30,7 +32,7 @@ type StepListProps = {
  * workflow detail). Hover edit/delete, inline edit → "Forming new step…" →
  * resolved flash, fix-step cards whose selections are never terminal.
  */
-export default function StepList({ steps, onChange }: StepListProps) {
+export default function StepList({ steps, onChange, initialEditStepId }: StepListProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftText, setDraftText] = useState('')
@@ -38,6 +40,16 @@ export default function StepList({ steps, onChange }: StepListProps) {
   const [customFixText, setCustomFixText] = useState('')
   const newStepIds = useRef(new Set<string>())
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  const openedEditRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!initialEditStepId || openedEditRef.current === initialEditStepId) return
+    const step = steps.find((s) => s.id === initialEditStepId)
+    if (!step) return
+    openedEditRef.current = initialEditStepId
+    setEditingId(step.id)
+    setDraftText(step.title)
+  }, [initialEditStepId, steps])
 
   function setPhase(id: string, phase: EditorStep['phase']) {
     onChange((s) => s.map((step) => (step.id === id ? { ...step, phase } : step)))

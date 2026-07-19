@@ -6,7 +6,8 @@ import type {
   Run,
   StoreSnapshot,
   Suggestion,
-  Workflow
+  Workflow,
+  WorkspaceFocus
 } from '../../shared/types'
 
 type ActivityHoldPayload = {
@@ -28,7 +29,7 @@ declare global {
         mode: 'pill' | 'glass' | 'panel',
         opts?: { durationMs?: number; pillDrive?: boolean }
       ) => Promise<'above' | 'below'>
-      openWorkspace: (focusWorkflowId?: string) => Promise<void>
+      openWorkspace: (focus?: string | WorkspaceFocus) => Promise<void>
       closeWindow: () => Promise<void>
       minimizeWindow: () => Promise<void>
       showContextMenu: () => Promise<void>
@@ -43,13 +44,18 @@ declare global {
       runWorkflow: (workflowId: string) => Promise<boolean>
       openRecordPanel: () => Promise<void>
       openEditor: () => Promise<void>
+      revealRunning: () => Promise<void>
       onRunWorkflow: (cb: (workflowId: string) => void) => () => void
       onOpenRecordPanel: (cb: () => void) => () => void
       onOpenEditor: (cb: () => void) => () => void
+      onRevealRunning: (cb: () => void) => () => void
       onFocusWorkflow: (cb: (workflowId: string) => void) => () => void
+      onFocusWorkspace: (cb: (focus: WorkspaceFocus) => void) => () => void
       getSnapshot: () => Promise<StoreSnapshot>
       getWorkflow: (id: string) => Promise<Workflow | null>
+      getRun: (id: string) => Promise<Run | null>
       upsertWorkflow: (workflow: Workflow) => Promise<StoreSnapshot>
+      deleteWorkflow: (id: string) => Promise<StoreSnapshot>
       saveRun: (run: Run) => Promise<StoreSnapshot>
       upsertActivityHold: (payload: ActivityHoldPayload) => Promise<StoreSnapshot>
       clearActivityHold: (runId: string) => Promise<StoreSnapshot>

@@ -14,7 +14,8 @@ export default function SummaryPanel() {
     summaryOutcome,
     summaryMeta,
     finishSummary,
-    runRemaining
+    runRemaining,
+    lastRunId
   } = useWorkflow()
   const isStopped = summaryOutcome === 'stopped'
   // Hovering "Run remaining" highlights the rows it will act on.
@@ -47,7 +48,16 @@ export default function SummaryPanel() {
       </div>
 
       <div className="ledger-footer">
-        <button className="btn-text" onClick={() => window.ghostBridge?.openWorkspace?.()}>
+        <button
+          className="btn-text"
+          onClick={() =>
+            window.ghostBridge?.openWorkspace?.(
+              lastRunId
+                ? { workflowId: workflow.id, runId: lastRunId }
+                : { workflowId: workflow.id }
+            )
+          }
+        >
           View log
         </button>
         <div className="footer-actions">

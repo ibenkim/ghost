@@ -148,34 +148,34 @@ Extract-then-extend; no visual redesign until Figma refs arrive per component.
 
 ## Phase 3 — Employee Workspace (evolve v2 workspace)
 
-- [ ] Wire `WorkspaceApp` to the shared store (drop local mock state); home
+- [x] Wire `WorkspaceApp` to the shared store (drop local mock state); home
       header count mirrors the visible list.
-- [ ] 1.5 ⋯ overflow menu on `WorkflowDetail` header: Rename ⏎ (inline title
+- [x] 1.5 ⋯ overflow menu on `WorkflowDetail` header: Rename ⏎ (inline title
       edit) · Duplicate ⌘D ("Copy of [name]", Off, opens its detail) · Move to
       folder… (stub — Folders is future work) · Copy share link ⌥⌘C (stub) ·
       Turn off · Delete… (rose).
-- [ ] Delete confirm dialog over scrim (copy names what's preserved: runs stay
+- [x] Delete confirm dialog over scrim (copy names what's preserved: runs stay
       in History; scheduled runs stop immediately); Esc = Cancel; deletion
       removes from store, keeps `Run` records.
-- [ ] 1.6 Trigger editor popover on detail Overview — reuse the component built
+- [x] 1.6 Trigger editor popover on detail Overview — reuse the component built
       in Phase 2; footer: Turn off trigger · Cancel · Save trigger; live
       "Next run … uses this Mac's time zone" preview; Esc/click-away = Cancel.
-- [ ] 1.7 Log tab (replace static `LogTab` in `WorkflowDetail`): month-grouped
+- [x] 1.7 Log tab (replace static `LogTab` in `WorkflowDetail`): month-grouped
       run rows (date/time · outcome incl. question count · "≈ 36 min returned";
       stopped runs show no return figure), backed by `Run` records.
-- [ ] 1.7 Run detail view: "‹ All runs" · header + meta ("… · 1 question
+- [x] 1.7 Run detail view: "‹ All runs" · header + meta ("… · 1 question
       answered · ran unattended") · per-step rows with timestamp + teal check,
       Skipped chips, rose held step; question receipts (amber sub-line, click →
       "Always use this answer" converts Ask-each-time to fixed choice on the
       workflow); artifact links out; feedback footer "Looks right / Something's
       off — fix a step" deep-linking into Overview with that step in edit mode.
-- [ ] Activity: generate COMING UP rows from the schedule model (replace static
+- [x] Activity: generate COMING UP rows from the schedule model (replace static
       mocks); per-occurrence skip persists.
-- [ ] 2.5 needs-you row in `ActivityView`: amber "waiting on your answer since
+- [x] 2.5 needs-you row in `ActivityView`: amber "waiting on your answer since
       …" + Answer → opens the pill's running question card (`pill:` IPC);
       rose "needs help" variant; after the 10-min error hold stops the run,
       row reads "Stopped — needed help at step n".
-- [ ] Summary "View log" / Activity "Done" rows route to run detail (1.7).
+- [x] Summary "View log" / Activity "Done" rows route to run detail (1.7).
 
 ## Phase 4 — Onboarding + permissions (new)
 

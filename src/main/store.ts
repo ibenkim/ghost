@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
+import { mergeComingUp } from '../shared/activity'
 import { createSeedSnapshot } from '../shared/seed'
 import type {
   ActivityEntry,
@@ -73,6 +74,10 @@ function commit(mutator: (draft: StoreSnapshot) => void): StoreSnapshot {
   return getSnapshot()
 }
 
+function refreshComingUp(draft: StoreSnapshot): void {
+  draft.activity = mergeComingUp(draft.activity, draft.workflows)
+}
+
 export function getSnapshot(): StoreSnapshot {
   return structuredClone(snapshot)
 }
@@ -92,6 +97,7 @@ export function loadStore(): StoreSnapshot {
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown
     snapshot = normalizeSnapshot(raw)
+    refreshComingUp(snapshot)
   } catch (err) {
     console.error('[store] load failed — reseeding', err)
     snapshot = createSeedSnapshot()
@@ -105,6 +111,18 @@ export function upsertWorkflow(workflow: Workflow): StoreSnapshot {
     const i = draft.workflows.findIndex((w) => w.id === workflow.id)
     if (i >= 0) draft.workflows[i] = workflow
     else draft.workflows.unshift(workflow)
+    refreshComingUp(draft)
+  })
+}
+
+/** Remove a workflow; Run records stay for History. */
+export function deleteWorkflow(id: string): StoreSnapshot {
+  return commit((draft) => {
+    draft.workflows = draft.workflows.filter((w) => w.id !== id)
+    draft.activity = draft.activity.filter(
+      (a) => !(a.workflowId === id && a.kind === 'scheduled')
+    )
+    refreshComingUp(draft)
   })
 }
 
@@ -128,6 +146,7 @@ export function saveRun(run: Run): StoreSnapshot {
     const activity: ActivityEntry = {
       id: `act_${run.id}`,
       workflowId: run.workflowId,
+      runId: run.id,
       name: wf?.name ?? 'Workflow',
       timeLabel: formatActivityTime(new Date(run.endedAt ?? run.startedAt)),
       group: 'today',
@@ -190,6 +209,11 @@ export function skipActivity(entryId: string): StoreSnapshot {
   })
 }
 
+export function getRun(id: string): Run | null {
+  const run = snapshot.runs.find((r) => r.id === id)
+  return run ? structuredClone(run) : null
+}
+
 export type ActivityHoldPayload = {
   runId: string
   workflowId: string
@@ -208,6 +232,7 @@ export function upsertActivityHold(payload: ActivityHoldPayload): StoreSnapshot 
     const entry: ActivityEntry = {
       id,
       workflowId: payload.workflowId,
+      runId: payload.runId,
       name: payload.name,
       timeLabel: formatActivityTime(new Date(payload.waitingSince)),
       group: 'today',
@@ -235,7 +260,9 @@ export function clearActivityHold(runId: string): StoreSnapshot {
 export function registerStoreIpc(): void {
   ipcMain.handle('store:getSnapshot', () => getSnapshot())
   ipcMain.handle('store:getWorkflow', (_e, id: string) => getWorkflow(id))
+  ipcMain.handle('store:getRun', (_e, id: string) => getRun(id))
   ipcMain.handle('store:upsertWorkflow', (_e, workflow: Workflow) => upsertWorkflow(workflow))
+  ipcMain.handle('store:deleteWorkflow', (_e, id: string) => deleteWorkflow(id))
   ipcMain.handle('store:saveRun', (_e, run: Run) => saveRun(run))
   ipcMain.handle('store:setSuggestion', (_e, suggestion: Suggestion | null) =>
     setSuggestion(suggestion)

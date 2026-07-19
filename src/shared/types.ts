@@ -199,6 +199,10 @@ export type ActivityEntry = {
   timeLabel: string
   group: 'coming-up' | 'today' | 'yesterday'
   kind: 'scheduled' | 'run'
+  /** For runs — deep-links Log / run detail. */
+  runId?: string
+  /** ISO fire time for a scheduled occurrence (skip identity). */
+  occurrenceAt?: string
   /** For runs. */
   outcome?: 'done' | 'paused' | 'stopped'
   /** Coming-up occurrences the user skipped (grayed, one-time). */
@@ -213,6 +217,12 @@ export type ActivityEntry = {
   waitingSince?: string
   /** Set when a 10-min error hold auto-stops the run. */
   stopReason?: string
+}
+
+/** Deep-link payload for opening the workspace on a workflow / run. */
+export type WorkspaceFocus = {
+  workflowId?: string
+  runId?: string
 }
 
 export type RecordMode = 'one-app' | 'full-screen'

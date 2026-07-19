@@ -177,6 +177,44 @@ export function upcomingLabel(trigger: Trigger, from: Date = new Date()): string
   return n ? formatUpcoming(n) : undefined
 }
 
+const MONTH_LONG = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December'
+] as const
+
+/**
+ * Activity COMING UP time label: "Tomorrow 9:00 A.M." / "August 1, 4:30 P.M."
+ * Same-day occurrences use just the clock time.
+ */
+export function formatOccurrenceLabel(when: Date, from: Date = new Date()): string {
+  const time = formatTime({ hour: when.getHours(), minute: when.getMinutes() })
+  const startOfToday = new Date(from)
+  startOfToday.setHours(0, 0, 0, 0)
+  const startOfWhen = new Date(when)
+  startOfWhen.setHours(0, 0, 0, 0)
+  const dayDiff = Math.round(
+    (startOfWhen.getTime() - startOfToday.getTime()) / (24 * 60 * 60 * 1000)
+  )
+  if (dayDiff === 0) return time
+  if (dayDiff === 1) return `Tomorrow ${time}`
+  return `${MONTH_LONG[when.getMonth()]} ${when.getDate()}, ${time}`
+}
+
+/** Stable id for a scheduled occurrence row. */
+export function comingUpId(workflowId: string, occurrenceAt: Date): string {
+  return `act_up_${workflowId}_${occurrenceAt.toISOString()}`
+}
+
 /** Preset cadences for the Phase 0 trigger picker (Phase 2 replaces with full editor). */
 export const SCHEDULE_PRESETS: ScheduleCadence[] = [
   { kind: 'monthly', day: 1, time: { hour: 9, minute: 0 } },

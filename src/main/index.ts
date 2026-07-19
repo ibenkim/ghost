@@ -20,7 +20,7 @@ let panelBackdrop: BrowserWindow | null = null
 /** Fullscreen ink-20 dim behind the expanded editor. */
 let editorScrim: BrowserWindow | null = null
 /** Pending Library deep-link until the workspace window finishes loading. */
-let pendingWorkspaceFocusId: string | null = null
+let pendingWorkspaceFocus: { workflowId?: string; runId?: string } | null = null
 /** Last AppState reported by the pill (for context-menu recording variant). */
 let pillAppState: string = 'idle'
 
@@ -197,20 +197,34 @@ function layoutBackdrops(b: Rect) {
   panelBackdrop.setOpacity(1)
 }
 
-function sendWorkspaceFocus(workflowId: string | null) {
-  if (!workspaceWindow || !workflowId) return
-  workspaceWindow.webContents.send('workspace:focusWorkflow', workflowId)
+function sendWorkspaceFocus(focus: { workflowId?: string; runId?: string } | null) {
+  if (!workspaceWindow || !focus) return
+  workspaceWindow.webContents.send('workspace:focus', focus)
+  // Back-compat for older listeners.
+  if (focus.workflowId) {
+    workspaceWindow.webContents.send('workspace:focusWorkflow', focus.workflowId)
+  }
 }
 
-function openWorkspaceWindow(focusWorkflowId?: string) {
-  if (focusWorkflowId) pendingWorkspaceFocusId = focusWorkflowId
+function normalizeWorkspaceFocus(
+  focus?: string | { workflowId?: string; runId?: string }
+): { workflowId?: string; runId?: string } | null {
+  if (!focus) return null
+  if (typeof focus === 'string') return { workflowId: focus }
+  if (focus.workflowId || focus.runId) return focus
+  return null
+}
+
+function openWorkspaceWindow(focus?: string | { workflowId?: string; runId?: string }) {
+  const normalized = normalizeWorkspaceFocus(focus)
+  if (normalized) pendingWorkspaceFocus = normalized
 
   if (workspaceWindow) {
     workspaceWindow.show()
     workspaceWindow.focus()
-    if (pendingWorkspaceFocusId) {
-      sendWorkspaceFocus(pendingWorkspaceFocusId)
-      pendingWorkspaceFocusId = null
+    if (pendingWorkspaceFocus) {
+      sendWorkspaceFocus(pendingWorkspaceFocus)
+      pendingWorkspaceFocus = null
     }
     return
   }
@@ -221,6 +235,8 @@ function openWorkspaceWindow(focusWorkflowId?: string) {
     frame: false,
     transparent: true,
     resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     hasShadow: false,
     roundedCorners: false,
     webPreferences: {
@@ -231,9 +247,9 @@ function openWorkspaceWindow(focusWorkflowId?: string) {
   })
 
   workspaceWindow.webContents.on('did-finish-load', () => {
-    if (pendingWorkspaceFocusId) {
-      sendWorkspaceFocus(pendingWorkspaceFocusId)
-      pendingWorkspaceFocusId = null
+    if (pendingWorkspaceFocus) {
+      sendWorkspaceFocus(pendingWorkspaceFocus)
+      pendingWorkspaceFocus = null
     }
   })
 
@@ -586,8 +602,10 @@ ipcMain.handle('window:setBounds', (event, req: BoundsRequest): Placement => {
 })
 
 // ── IPC: workspace window lifecycle ──
-ipcMain.handle('workspace:open', (_event, focusWorkflowId?: string) =>
-  openWorkspaceWindow(focusWorkflowId)
+ipcMain.handle(
+  'workspace:open',
+  (_event, focus?: string | { workflowId?: string; runId?: string }) =>
+    openWorkspaceWindow(focus)
 )
 ipcMain.handle('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
@@ -621,6 +639,12 @@ ipcMain.handle('pill:openRecordPanel', () => {
 ipcMain.handle('pill:openEditor', () => {
   pillWindow?.show()
   pillWindow?.webContents.send('pill:openEditor')
+})
+/** Activity "Answer" / paused — show pill and expand the running hold. */
+ipcMain.handle('pill:revealRunning', () => {
+  pillWindow?.show()
+  pillWindow?.focus()
+  pillWindow?.webContents.send('pill:revealRunning')
 })
 
 // ── IPC: pill drag (follows cursor 1:1) ──

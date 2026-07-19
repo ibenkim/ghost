@@ -45,5 +45,6 @@ export type {
   VoiceNote,
   Weekday,
   Workflow,
-  WorkflowStatus
+  WorkflowStatus,
+  WorkspaceFocus
 } from '../../../shared/types'
