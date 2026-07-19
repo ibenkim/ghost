@@ -1,7 +1,14 @@
 import { app, shell, BrowserWindow, ipcMain, screen, Menu, globalShortcut } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-
+import {
+  getSnapshot,
+  getWorkflow,
+  loadStore,
+  registerStoreIpc,
+  setPillPosition
+} from './store'
+import { createTray, destroyTray } from './tray'
 
 let pillWindow: BrowserWindow | null = null
 let workspaceWindow: BrowserWindow | null = null
@@ -10,6 +17,12 @@ let workspaceWindow: BrowserWindow | null = null
 // glass shape while the gap between them stays fully transparent.
 let pillBackdrop: BrowserWindow | null = null
 let panelBackdrop: BrowserWindow | null = null
+/** Fullscreen ink-20 dim behind the expanded editor. */
+let editorScrim: BrowserWindow | null = null
+/** Pending Library deep-link until the workspace window finishes loading. */
+let pendingWorkspaceFocusId: string | null = null
+/** Last AppState reported by the pill (for context-menu recording variant). */
+let pillAppState: string = 'idle'
 
 const PILL_W = 94
 const PILL_H = 24
@@ -32,8 +45,22 @@ function getBottomRightBounds(width: number, height: number) {
   }
 }
 
+function initialPillBounds() {
+  const saved = getSnapshot().pillPosition
+  if (saved) {
+    return {
+      x: Math.round(saved.x - PILL_W),
+      y: Math.round(saved.y - PILL_H),
+      width: PILL_W,
+      height: PILL_H
+    }
+  }
+  return getBottomRightBounds(PILL_W, PILL_H)
+}
+
 function createPillWindow() {
-  const bounds = getBottomRightBounds(PILL_W, PILL_H)
+  const bounds = initialPillBounds()
+  pillAnchor = { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
 
   pillWindow = new BrowserWindow({
     ...bounds,
@@ -73,7 +100,10 @@ function createPillWindow() {
   })
 
   // Backdrops shadow the pill window's visibility exactly.
-  pillWindow.on('hide', () => hideBackdrops())
+  pillWindow.on('hide', () => {
+    hideBackdrops()
+    setEditorScrimVisible(false)
+  })
   pillWindow.on('show', () => {
     if (pillWindow) layoutBackdrops(pillWindow.getBounds())
   })
@@ -167,10 +197,21 @@ function layoutBackdrops(b: Rect) {
   panelBackdrop.setOpacity(1)
 }
 
-function openWorkspaceWindow() {
+function sendWorkspaceFocus(workflowId: string | null) {
+  if (!workspaceWindow || !workflowId) return
+  workspaceWindow.webContents.send('workspace:focusWorkflow', workflowId)
+}
+
+function openWorkspaceWindow(focusWorkflowId?: string) {
+  if (focusWorkflowId) pendingWorkspaceFocusId = focusWorkflowId
+
   if (workspaceWindow) {
     workspaceWindow.show()
     workspaceWindow.focus()
+    if (pendingWorkspaceFocusId) {
+      sendWorkspaceFocus(pendingWorkspaceFocusId)
+      pendingWorkspaceFocusId = null
+    }
     return
   }
 
@@ -189,6 +230,13 @@ function openWorkspaceWindow() {
     }
   })
 
+  workspaceWindow.webContents.on('did-finish-load', () => {
+    if (pendingWorkspaceFocusId) {
+      sendWorkspaceFocus(pendingWorkspaceFocusId)
+      pendingWorkspaceFocusId = null
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     workspaceWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#workspace`)
   } else {
@@ -198,6 +246,59 @@ function openWorkspaceWindow() {
   workspaceWindow.on('closed', () => {
     workspaceWindow = null
   })
+}
+
+function showPill() {
+  if (!pillWindow) createPillWindow()
+  pillWindow?.show()
+  pillWindow?.focus()
+}
+
+function hidePill() {
+  pillWindow?.hide()
+}
+
+function setEditorScrimVisible(visible: boolean) {
+  if (!visible) {
+    editorScrim?.setOpacity(0)
+    return
+  }
+  if (!editorScrim) {
+    const { x, y, width, height } = screen.getPrimaryDisplay().bounds
+    editorScrim = new BrowserWindow({
+      x,
+      y,
+      width,
+      height,
+      show: false,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hasShadow: false,
+      backgroundColor: '#00000000'
+    })
+    editorScrim.setIgnoreMouseEvents(true)
+    editorScrim.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+    editorScrim.setAlwaysOnTop(true, 'floating')
+    // ink-20 = rgba(22, 20, 39, 0.20)
+    editorScrim.loadURL(
+      'data:text/html,' +
+        encodeURIComponent(
+          '<html><body style="margin:0;background:rgba(22,20,39,0.20);width:100vw;height:100vh;"></body></html>'
+        )
+    )
+    editorScrim.showInactive()
+    editorScrim.setOpacity(0)
+  }
+  const { x, y, width, height } = screen.getPrimaryDisplay().bounds
+  editorScrim.setBounds({ x, y, width, height }, false)
+  editorScrim.setOpacity(1)
+  // Keep the pill above the scrim.
+  pillWindow?.moveTop()
 }
 
 // ── IPC: pill window sizing ──
@@ -485,18 +586,33 @@ ipcMain.handle('window:setBounds', (event, req: BoundsRequest): Placement => {
 })
 
 // ── IPC: workspace window lifecycle ──
-ipcMain.handle('workspace:open', () => openWorkspaceWindow())
+ipcMain.handle('workspace:open', (_event, focusWorkflowId?: string) =>
+  openWorkspaceWindow(focusWorkflowId)
+)
 ipcMain.handle('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
 })
 ipcMain.handle('window:minimize', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize()
 })
+ipcMain.handle('editor:setScrim', (_event, visible: boolean) => {
+  setEditorScrimVisible(Boolean(visible))
+})
+ipcMain.handle('pill:setAppState', (_event, next: string) => {
+  pillAppState = typeof next === 'string' ? next : 'idle'
+})
 
 // ── IPC: workspace → pill commands ──
 ipcMain.handle('pill:runWorkflow', (_event, workflowId: string) => {
+  // Resolve from the shared store — never fall back to a hardcoded mock.
+  const workflow = getWorkflow(workflowId)
+  if (!workflow) {
+    console.warn(`[pill:runWorkflow] unknown workflowId: ${workflowId}`)
+    return false
+  }
   pillWindow?.show()
   pillWindow?.webContents.send('pill:runWorkflow', workflowId)
+  return true
 })
 ipcMain.handle('pill:openRecordPanel', () => {
   pillWindow?.show()
@@ -552,6 +668,7 @@ ipcMain.handle('pill:dragEnd', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (win) {
     pillAnchor = pillAnchorFromWindow(win)
+    setPillPosition({ x: pillAnchor.x, y: pillAnchor.y })
   }
   if (win && pendingBounds) {
     const req = pendingBounds
@@ -561,18 +678,49 @@ ipcMain.handle('pill:dragEnd', (event) => {
 })
 
 // ── IPC: pill context menu ──
-// Right-click → Open Library · Settings · Hide pill. During recording,
-// hiding only hides visuals — recording continues; ⌥G recovers the pill.
+// Idle: Open Library ⌘L · Record a workflow ⌥R · Settings… ⌘, · Hide pill ⌥H
+// Recording: omits Record; appends "Recording continues" under Hide pill.
 ipcMain.handle('pill:contextMenu', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win) return
-  const menu = Menu.buildFromTemplate([
-    { label: 'Open Library', click: () => openWorkspaceWindow() },
-    { label: 'Settings', enabled: false },
+  const recording = pillAppState === 'recording'
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Open Library',
+      accelerator: 'CommandOrControl+L',
+      click: () => openWorkspaceWindow()
+    }
+  ]
+  if (!recording) {
+    template.push({
+      label: 'Record a workflow',
+      accelerator: 'Alt+R',
+      click: () => {
+        showPill()
+        pillWindow?.webContents.send('pill:openRecordPanel')
+      }
+    })
+  }
+  template.push(
     { type: 'separator' },
-    { label: 'Hide pill', click: () => win.hide() }
-  ])
-  menu.popup({ window: win })
+    {
+      label: 'Settings…',
+      accelerator: 'CommandOrControl+,',
+      enabled: false
+    },
+    {
+      label: 'Hide pill',
+      accelerator: 'Alt+H',
+      click: () => hidePill()
+    }
+  )
+  if (recording) {
+    template.push({
+      label: 'Recording continues',
+      enabled: false
+    })
+  }
+  Menu.buildFromTemplate(template).popup({ window: win })
 })
 
 app.whenReady().then(() => {
@@ -582,24 +730,49 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  loadStore()
+  registerStoreIpc()
+
   createPillWindow()
   createBackdrops()
   if (pillWindow) layoutBackdrops(pillWindow.getBounds())
 
-  // Recovery hotkey: re-show the pill and open the record panel.
-  globalShortcut.register('Alt+G', () => {
-    if (!pillWindow) return
-    pillWindow.show()
-    pillWindow.webContents.send('pill:openRecordPanel')
+  createTray({
+    showPill: () => showPill(),
+    openLibrary: () => openWorkspaceWindow()
   })
+
+  // ⌥G — stand-in for bare Option (polish): show pill + open record panel.
+  globalShortcut.register('Alt+G', () => {
+    showPill()
+    pillWindow?.webContents.send('pill:openRecordPanel')
+  })
+  // ⌥R — Record a workflow (same as context-menu item).
+  globalShortcut.register('Alt+R', () => {
+    showPill()
+    pillWindow?.webContents.send('pill:openRecordPanel')
+  })
+  // ⌥H — Hide / show pill (tray also recovers).
+  globalShortcut.register('Alt+H', () => {
+    if (!pillWindow) return
+    if (pillWindow.isVisible()) hidePill()
+    else showPill()
+  })
+  // ⌘L — Open Library
+  globalShortcut.register('CommandOrControl+L', () => openWorkspaceWindow())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createPillWindow()
+    else showPill()
   })
 })
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  setEditorScrimVisible(false)
+  editorScrim?.destroy()
+  editorScrim = null
+  destroyTray()
 })
 
 app.on('window-all-closed', () => {

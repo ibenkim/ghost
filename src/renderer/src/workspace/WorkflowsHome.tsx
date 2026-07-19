@@ -1,4 +1,5 @@
-import type { Suggestion, WorkflowRecord } from '../state/types'
+import { formatSchedule } from '../../../shared/schedule'
+import type { Suggestion, Workflow } from '../state/types'
 import AppChip from '../components/shared/AppChip'
 
 /** 1.2–1.4 — Workflows home: metric header, rows with On/Off, Suggested card. */
@@ -9,7 +10,7 @@ export default function WorkflowsHome({
   onToggleStatus,
   onDiscardSuggestion
 }: {
-  workflows: WorkflowRecord[]
+  workflows: Workflow[]
   suggestion: Suggestion | null
   onOpen: (id: string) => void
   onToggleStatus: (id: string) => void
@@ -33,26 +34,29 @@ export default function WorkflowsHome({
       </div>
 
       <div className="ws-rows">
-        {workflows.map((w) => (
-          <div className="ws-row" key={w.id} onClick={() => onOpen(w.id)}>
-            <span className={`ws-row-name ${w.status === 'off' ? 'ws-row-name-off' : ''}`}>
-              {w.name}
-              {w.schedule && <span className="ws-row-schedule">  ·  {w.schedule}</span>}
-            </span>
-            <span className="ws-row-right">
-              <button
-                className={`status-word ${w.status === 'on' ? 'status-on' : 'status-off'}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleStatus(w.id)
-                }}
-              >
-                {w.status === 'on' ? 'On' : 'Off'}
-              </button>
-              <ChevronRight />
-            </span>
-          </div>
-        ))}
+        {workflows.map((w) => {
+          const schedule = w.trigger.cadence ? formatSchedule(w.trigger.cadence) : null
+          return (
+            <div className="ws-row" key={w.id} onClick={() => onOpen(w.id)}>
+              <span className={`ws-row-name ${w.status === 'off' ? 'ws-row-name-off' : ''}`}>
+                {w.name}
+                {schedule && <span className="ws-row-schedule">  ·  {schedule}</span>}
+              </span>
+              <span className="ws-row-right">
+                <button
+                  className={`status-word ${w.status === 'on' ? 'status-on' : 'status-off'}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleStatus(w.id)
+                  }}
+                >
+                  {w.status === 'on' ? 'On' : 'Off'}
+                </button>
+                <ChevronRight />
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {suggestion && (

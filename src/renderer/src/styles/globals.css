@@ -17,13 +17,24 @@
   --purple-70: rgba(51, 25, 217, 0.7);
   --main: #625b8f;
 
-  /* Semantic */
+  /*
+   * Semantic status colors (v3):
+   *   amber       = needs an answer (question holds, fix-step)
+   *   amber-soft  = soft tint behind amber surfaces
+   *   rose        = failed / stopped
+   *   teal        = done / saved
+   *   apricot     = permission paused (revoked) — not question holds
+   */
   --danger: rgba(229, 55, 43, 0.8);
   --amber: rgba(194, 117, 96, 0.7);
   --amber-text: #c27560;
+  --amber-soft: rgba(194, 117, 96, 0.14);
   --apricot: rgba(211, 164, 106, 0.8);
   --apricot-text: rgba(197, 127, 40, 0.8);
   --rose: rgba(217, 107, 80, 0.85);
+  --teal: #2a9d8f;
+  --teal-text: rgba(42, 157, 143, 0.95);
+  --teal-soft: rgba(42, 157, 143, 0.16);
 
   /*
    * Surfaces — Figma glass: idle fill 0.15 / hover panel fill 0.2.
@@ -296,8 +307,42 @@ button {
   gap: 6px;
 }
 
-/* Apricot state: a held question is never silent */
+/* Apricot = permission pause (Phase 4); amber = needs an answer;
+   rose = failed/stopped; teal = done/saved. */
 .pill-apricot { border-color: var(--apricot); }
+.pill-amber { border-color: var(--amber); }
+.pill-rose { border-color: var(--rose); }
+.pill-teal {
+  border: 1px solid var(--teal);
+  gap: 7px;
+  min-width: 0;
+  padding: 0 12px;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--icon-color);
+}
+.status-dot-teal { background: var(--teal); }
+.status-dot-amber { background: var(--amber-text); }
+.status-dot-rose { background: var(--rose); }
+.status-dot-apricot { background: var(--apricot); }
+.pill-action {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--white-text);
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill-action:hover { opacity: 0.85; }
 
 .pill-body {
   display: inline-flex;

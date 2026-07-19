@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { WorkflowRecord } from '../state/types'
+import type { Workflow } from '../state/types'
 import TriggerSection from '../components/shared/TriggerSection'
 import StepList from '../components/shared/StepList'
 
@@ -12,9 +12,9 @@ export default function WorkflowDetail({
   onBack,
   onUpdate
 }: {
-  workflow: WorkflowRecord
+  workflow: Workflow
   onBack: () => void
-  onUpdate: (updater: (w: WorkflowRecord) => WorkflowRecord) => void
+  onUpdate: (updater: (w: Workflow) => Workflow) => void
 }) {
   const [tab, setTab] = useState<'overview' | 'log'>('overview')
 
@@ -28,7 +28,7 @@ export default function WorkflowDetail({
           <div>
             <div className="ws-header-title">{workflow.name}</div>
             <div className="ws-header-sub">
-              {workflow.status === 'on' ? 'On' : 'Off'} · {workflow.runs} runs ·{' '}
+              {workflow.status === 'on' ? 'On' : 'Off'} · {workflow.runCount} runs ·{' '}
               {workflow.hoursReturned}
             </div>
           </div>
@@ -59,10 +59,8 @@ export default function WorkflowDetail({
       {tab === 'overview' ? (
         <div className="ws-detail-body scroll">
           <TriggerSection
-            trigger={{ schedule: workflow.schedule, upcoming: workflow.upcoming }}
-            onChange={(t) =>
-              onUpdate((w) => ({ ...w, schedule: t.schedule, upcoming: t.upcoming }))
-            }
+            trigger={workflow.trigger}
+            onChange={(t) => onUpdate((w) => ({ ...w, trigger: t }))}
           />
           <div className="ledger-section">
             <div className="section-label">STEPS</div>

@@ -7,7 +7,7 @@ import { ChevronDown } from '../GhostPill'
 /**
  * 05 — editor, 660×521 white panel. Header · TRIGGER · STEPS · footer
  * (Cancel with confirm · Run · Save Workflow). Esc collapses to the
- * "Editing" pill — Cancel is the only destructive exit.
+ * "Editing" pill — Cancel/✕ is the only destructive exit.
  */
 export default function EditorPanel() {
   const {
@@ -28,31 +28,44 @@ export default function EditorPanel() {
       if (e.key !== 'Escape') return
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      if (confirmDiscard) {
+        setConfirmDiscard(false)
+        return
+      }
       setEditorCollapsed(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setEditorCollapsed])
+  }, [setEditorCollapsed, confirmDiscard])
 
   function commitTitle() {
-    if (titleDraft.trim()) setWorkflow((w) => ({ ...w, title: titleDraft.trim() }))
+    if (titleDraft.trim()) setWorkflow((w) => ({ ...w, name: titleDraft.trim() }))
     setEditingTitle(false)
   }
 
   function beginTitleEdit() {
-    setTitleDraft(workflow.title)
+    setTitleDraft(workflow.name)
     setEditingTitle(true)
   }
 
   return (
     <div className="editor-panel">
-      <button
-        className="chevron-btn editor-collapse"
-        onClick={() => setEditorCollapsed(true)}
-        title="Collapse"
-      >
-        <ChevronDown />
-      </button>
+      <div className="editor-chrome">
+        <button
+          className="editor-close"
+          onClick={() => setConfirmDiscard(true)}
+          title="Cancel"
+        >
+          <XGlyph />
+        </button>
+        <button
+          className="chevron-btn editor-collapse"
+          onClick={() => setEditorCollapsed(true)}
+          title="Collapse"
+        >
+          <ChevronDown />
+        </button>
+      </div>
 
       <div className="editor-head">
         <div className="eyebrow">Here's what I learned</div>
@@ -72,7 +85,7 @@ export default function EditorPanel() {
             />
           ) : (
             <button className="editor-title" onClick={beginTitleEdit}>
-              {workflow.title}
+              {workflow.name}
             </button>
           )}
           <span className="editor-edit-icon" onClick={beginTitleEdit}>

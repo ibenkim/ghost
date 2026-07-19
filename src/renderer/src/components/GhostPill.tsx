@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useWorkflow } from '../state/WorkflowContext'
+import StatusPill from './shared/StatusPill'
 
 /**
  * The pill IS the character — a horizontal glass pill whose content changes
@@ -8,7 +9,9 @@ import { useWorkflow } from '../state/WorkflowContext'
 export default function GhostPill() {
   const {
     state,
-    toast,
+    savedConfirm,
+    openSavedInLibrary,
+    dismissSavedConfirm,
     openHover,
     closeHover,
     beginDrag,
@@ -25,7 +28,8 @@ export default function GhostPill() {
     toggleRunPause,
     runElapsedLabel,
     setRunCollapsed,
-    hasQuestionHold
+    hasQuestionHold,
+    hasErrorHold
   } = useWorkflow()
   const dragging = useRef(false)
 
@@ -43,7 +47,6 @@ export default function GhostPill() {
       if (!pressStart.current || dragging.current) return
       const dx = e.clientX - pressStart.current.x
       const dy = e.clientY - pressStart.current.y
-      // Same movement threshold as open: past this = drag, not click.
       if (dx * dx + dy * dy < 16) return
       dragging.current = true
       const { collapseToPill } = beginDrag()
@@ -59,7 +62,10 @@ export default function GhostPill() {
         return
       }
       if (!wasPress) return
-      // No drag movement → treat as click (open when idle, close when hover).
+      if (savedConfirm && state === 'idle') {
+        dismissSavedConfirm()
+        return
+      }
       if (state === 'idle') openHover()
       else if (state === 'hover') closeHover()
     }
@@ -69,11 +75,18 @@ export default function GhostPill() {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [beginDrag, endDrag, openHover, closeHover, state])
+  }, [
+    beginDrag,
+    endDrag,
+    openHover,
+    closeHover,
+    state,
+    savedConfirm,
+    dismissSavedConfirm
+  ])
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault()
-    // The context menu dismisses the hover panel first.
     if (state === 'hover') closeHover()
     window.ghostBridge?.showContextMenu?.()
   }
@@ -100,9 +113,7 @@ export default function GhostPill() {
   // ── Organizing: "Thinking..." ──
   if (state === 'organizing') {
     return (
-      <div className="pill pill-glass glass-stroke glass-stroke-pill" {...sharedProps}>
-        <span className="pill-text pill-text-light pill-blink">Thinking...</span>
-      </div>
+      <StatusPill label={<span className="pill-blink">Thinking...</span>} {...sharedProps} />
     )
   }
 
@@ -120,12 +131,21 @@ export default function GhostPill() {
 
   // ── Running collapsed: [pause] · "name · 3/6" · 1:05 · chevron ──
   if (state === 'running') {
+    const tone = hasErrorHold ? 'rose' : hasQuestionHold ? 'amber' : 'default'
     return (
-      <div className={`pill pill-active ${hasQuestionHold ? 'pill-apricot' : ''}`} {...sharedProps}>
+      <div
+        className={`pill pill-active ${tone === 'amber' ? 'pill-amber' : ''} ${
+          tone === 'rose' ? 'pill-rose' : ''
+        }`}
+        {...sharedProps}
+      >
         <PauseButton paused={runPaused} onToggle={toggleRunPause} />
         <button className="pill-body" onClick={() => setRunCollapsed(false)}>
           <span className="pill-text">
-            {workflow.title} <span className="pill-dim">· {runDoneCount}/{runSteps.length}</span>
+            {workflow.name}{' '}
+            <span className="pill-dim">
+              · {runDoneCount}/{runSteps.length}
+            </span>
           </span>
           <span className="pill-time">{runElapsedLabel}</span>
           <ChevronUp />
@@ -134,14 +154,26 @@ export default function GhostPill() {
     )
   }
 
-  // ── Idle / hover: "Hello" (logo/mark placeholder) or saved toast ──
+  // ── Idle / hover: Hello, or teal saved confirmation ──
+  if (savedConfirm && state === 'idle') {
+    return (
+      <StatusPill
+        tone="teal"
+        showDot
+        label="Workflow saved ·"
+        actionLabel="Open in Library"
+        onAction={openSavedInLibrary}
+        {...sharedProps}
+      />
+    )
+  }
+
   return (
-    <div
-      className={`pill pill-glass glass-stroke glass-stroke-pill ${state === 'hover' ? 'pill-ready' : ''}`}
+    <StatusPill
+      label="Hello"
+      className={state === 'hover' ? 'pill-ready' : ''}
       {...sharedProps}
-    >
-      <span className="pill-text pill-text-light">{toast ?? 'Hello'}</span>
-    </div>
+    />
   )
 }
 

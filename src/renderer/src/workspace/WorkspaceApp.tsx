@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MOCK_ACTIVITY, MOCK_SUGGESTION, MOCK_WORKFLOW_RECORDS } from '../state/mockData'
-import type { ActivityEntry, WorkflowRecord } from '../state/types'
+import type { ActivityEntry, Workflow } from '../state/types'
 import Sidebar from './Sidebar'
 import WorkflowsHome from './WorkflowsHome'
 import WorkflowDetail from './WorkflowDetail'
@@ -13,15 +13,38 @@ export type Space = 'Personal' | "Harry's team"
 /**
  * The employee-side workspace window: sidebar (Workflows / Activity +
  * team-menu) and content views. 807×549, white, r20.
+ *
+ * Phase 0 keeps local mock state; Phase 3's first task wires this to the
+ * shared main-process store.
  */
 export default function WorkspaceApp() {
   const [nav, setNav] = useState<WorkspaceNav>('workflows')
   const [space, setSpace] = useState<Space>('Personal')
   const [detailId, setDetailId] = useState<string | null>(null)
 
-  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(MOCK_WORKFLOW_RECORDS)
+  const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOW_RECORDS)
   const [suggestion, setSuggestion] = useState(MOCK_SUGGESTION as typeof MOCK_SUGGESTION | null)
   const [activity, setActivity] = useState<ActivityEntry[]>(MOCK_ACTIVITY)
+
+  // Deep-link from the teal "Open in Library" saved pill (Phase 2).
+  useEffect(() => {
+    return window.ghostBridge?.onFocusWorkflow?.((workflowId) => {
+      setNav('workflows')
+      setSpace('Personal')
+      setDetailId(workflowId)
+      // If the workflow was just saved and isn't in the local mock list yet,
+      // pull it from the shared store so the detail view can open.
+      window.ghostBridge?.getWorkflow?.(workflowId).then((wf) => {
+        if (!wf) return
+        setWorkflows((ws) => {
+          if (ws.some((w) => w.id === wf.id)) {
+            return ws.map((w) => (w.id === wf.id ? wf : w))
+          }
+          return [wf, ...ws]
+        })
+      })
+    })
+  }, [])
 
   // Selecting a space filters the whole workspace; the mock keeps personal
   // data in "Personal" and shows an empty team space.
@@ -30,7 +53,7 @@ export default function WorkspaceApp() {
 
   const detail = detailId ? workflows.find((w) => w.id === detailId) ?? null : null
 
-  function updateWorkflow(id: string, updater: (w: WorkflowRecord) => WorkflowRecord) {
+  function updateWorkflow(id: string, updater: (w: Workflow) => Workflow) {
     setWorkflows((ws) => ws.map((w) => (w.id === id ? updater(w) : w)))
   }
 

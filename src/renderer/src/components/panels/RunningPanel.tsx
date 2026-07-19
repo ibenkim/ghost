@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useWorkflow } from '../../state/WorkflowContext'
 import type { RunStep } from '../../state/types'
 import AppChip from '../shared/AppChip'
+import RunCard from '../shared/RunCard'
 import { PauseButton, ChevronDown } from '../GhostPill'
 
 /**
  * 6.2 — running expanded: flat single-workflow ledger mirroring the editor.
  * Pause lives only in the header icon; footer is Stop · Edit.
+ * 6.3 / 6.4 — inline run-card holds at the active step.
  */
 export default function RunningPanel() {
   const {
@@ -19,16 +21,29 @@ export default function RunningPanel() {
     setRunCollapsed,
     skipStep,
     answerQuestion,
+    resolveError,
     stopRunning,
-    editFromRunning
+    editFromRunning,
+    hasQuestionHold,
+    hasErrorHold
   } = useWorkflow()
 
+  const holdSuffix = hasErrorHold
+    ? ' · needs help'
+    : hasQuestionHold
+      ? ' · needs an answer'
+      : ''
+
   return (
-    <div className="running-panel">
+    <div className={`running-panel ${hasErrorHold ? 'running-panel-rose' : ''} ${hasQuestionHold ? 'running-panel-amber' : ''}`}>
       <div className="ledger-header">
         <PauseButton paused={runPaused} onToggle={toggleRunPause} />
         <span className="ledger-title">
-          {workflow.title} <span className="pill-dim">· {runDoneCount}/{runSteps.length}</span>
+          {workflow.name}{' '}
+          <span className="pill-dim">
+            · {runDoneCount}/{runSteps.length}
+            {holdSuffix}
+          </span>
         </span>
         <span className="ledger-time">{runElapsedLabel}</span>
         <button className="chevron-btn" onClick={() => setRunCollapsed(true)} title="Collapse">
@@ -44,6 +59,7 @@ export default function RunningPanel() {
             runPaused={runPaused}
             onSkip={() => skipStep(step.id)}
             onAnswer={(optionId, custom) => answerQuestion(step.id, optionId, custom)}
+            onResolveError={(action) => resolveError(step.id, action)}
           />
         ))}
       </div>
@@ -64,53 +80,50 @@ function RunStepRow({
   step,
   runPaused,
   onSkip,
-  onAnswer
+  onAnswer,
+  onResolveError
 }: {
   step: RunStep
   runPaused: boolean
   onSkip: () => void
   onAnswer: (optionId: string, custom?: string) => void
+  onResolveError: (action: 'retry' | 'skip' | 'takeover') => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const [otherOpen, setOtherOpen] = useState(false)
-  const [otherText, setOtherText] = useState('')
 
   // Amber question card — run holds here until answered.
   if (step.status === 'question' && step.question && step.question.answerId === null) {
     return (
-      <div className="run-question">
-        <div className="run-question-title">{step.label}</div>
-        <div className="run-question-prompt">{step.question.prompt}</div>
-        <div className="fix-options">
-          {step.question.options.map((opt) => {
-            if (opt.kind === 'other' && otherOpen) {
-              return (
-                <input
-                  key={opt.id}
-                  className="fix-custom-input"
-                  autoFocus
-                  placeholder="Type a title…"
-                  value={otherText}
-                  onChange={(e) => setOtherText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && otherText.trim()) onAnswer(opt.id, otherText.trim())
-                  }}
-                />
-              )
-            }
-            return (
-              <button
-                key={opt.id}
-                className={`fix-option ${opt.kind === 'suggested' ? 'fix-option-suggested' : ''}`}
-                onClick={() => (opt.kind === 'other' ? setOtherOpen(true) : onAnswer(opt.id))}
-              >
-                {opt.kind === 'suggested' && <SparkIcon />}
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <RunCard
+        variant="question"
+        title={`${step.index} · ${step.label}`}
+        message={step.question.prompt}
+        chips={step.question.options}
+        footer="Run is holding — answering resumes automatically"
+        onSelect={onAnswer}
+      />
+    )
+  }
+
+  // Rose error card — Retry / Skip step / Take over.
+  if (step.status === 'error' && step.error && !step.error.takenOver) {
+    return (
+      <RunCard
+        variant="error"
+        title={`${step.index} · ${step.label}`}
+        message={step.error.message}
+        chips={[
+          { id: 'retry', label: 'Retry' },
+          { id: 'skip', label: 'Skip step' },
+          { id: 'takeover', label: 'Take over' }
+        ]}
+        footer="Held for 10 min — then the run stops and is logged"
+        onSelect={(id) => {
+          if (id === 'retry') onResolveError('retry')
+          else if (id === 'skip') onResolveError('skip')
+          else onResolveError('takeover')
+        }}
+      />
     )
   }
 
@@ -168,14 +181,6 @@ function CheckMark() {
       strokeWidth="1.4"
     >
       <path d="M1 4 4 7 10 1" />
-    </svg>
-  )
-}
-
-function SparkIcon() {
-  return (
-    <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor">
-      <path d="M5 0l1.1 2.9L9 4 6.1 5.1 5 8 3.9 5.1 1 4l2.9-1.1z" />
     </svg>
   )
 }

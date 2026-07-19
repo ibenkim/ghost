@@ -10,22 +10,42 @@ import {
   SetStateAction,
   ReactNode
 } from 'react'
+import { newId } from '../../../shared/id'
 import type {
   AppState,
+  QuestionReceipt,
   RecordMode,
+  Run,
   RunStep,
+  RunStepResult,
   SummaryOutcome,
   Workflow
 } from './types'
-import { makeRunSteps, MOCK_WATCH_LOG, MOCK_WORKFLOW } from './mockData'
+import { createMockDraft, makeRunSteps, MOCK_WATCH_LOG } from './mockData'
 
 export type WatchEntry = { time: string; text: string; voiceNote?: string }
 
 const RUN_TICK_MS = 1800
+/** 10-minute error hold → auto-stop (6.4). */
+const ERROR_HOLD_MS = 10 * 60 * 1000
+/** Teal saved pill reverts to Hello after ~6s. */
+const SAVED_PILL_MS = 6000
 /** Stable record-panel height (Figma ~277–293). Never open glass shorter than this. */
 const HOVER_PANEL_H = 289
 /** Reject clipped measures from close/morph — 81px poisoned the next open to h=113. */
 const HOVER_PANEL_MEASURE_MIN = 200
+
+type ActiveRun = {
+  id: string
+  workflowId: string
+  startedAt: string
+  questionReceipts: QuestionReceipt[]
+  stopReason?: string
+}
+
+type SavedConfirm = {
+  workflowId: string
+}
 
 type WorkflowContextValue = {
   state: AppState
@@ -48,8 +68,10 @@ type WorkflowContextValue = {
   setWorkflow: Dispatch<SetStateAction<Workflow>>
   editorCollapsed: boolean
   setEditorCollapsed: (v: boolean) => void
-  // pill status slot (idle toast)
-  toast: string | null
+  /** Teal saved confirmation (replaces toast-for-save). */
+  savedConfirm: SavedConfirm | null
+  openSavedInLibrary: () => void
+  dismissSavedConfirm: () => void
   // window layout
   panelPlacement: 'above' | 'below'
   /** True while the hover panel is morphing/fading out. */
@@ -70,7 +92,9 @@ type WorkflowContextValue = {
   runElapsedLabel: string
   runDoneCount: number
   hasQuestionHold: boolean
+  hasErrorHold: boolean
   answerQuestion: (stepId: string, optionId: string, custom?: string) => void
+  resolveError: (stepId: string, action: 'retry' | 'skip' | 'takeover') => void
   skipStep: (stepId: string) => void
   // summary
   summaryOutcome: SummaryOutcome
@@ -99,23 +123,64 @@ function formatElapsed(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+function toRunStepResults(steps: RunStep[]): RunStepResult[] {
+  return steps.map((s) => ({
+    stepId: s.id,
+    index: s.index,
+    label: s.label,
+    doneLabel: s.doneLabel,
+    status:
+      s.status === 'question' || s.status === 'error' || s.status === 'active'
+        ? 'held'
+        : s.status,
+    app: s.app,
+    voiceNote: s.voiceNote
+  }))
+}
+
+function buildRunRecord(
+  active: ActiveRun,
+  steps: RunStep[],
+  outcome: SummaryOutcome,
+  elapsedSeconds: number
+): Run {
+  const endedAt = new Date().toISOString()
+  return {
+    id: active.id,
+    workflowId: active.workflowId,
+    startedAt: active.startedAt,
+    endedAt,
+    outcome,
+    steps: toRunStepResults(steps),
+    questions: active.questionReceipts,
+    returnedMinutes:
+      outcome === 'done' ? Math.max(1, Math.round(elapsedSeconds / 60) || 1) : undefined,
+    stopReason: active.stopReason
+  }
+}
+
+function isHoldStatus(status: RunStep['status']): boolean {
+  return status === 'question' || status === 'error'
+}
+
 export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>('idle')
   const stateRef = useRef(state)
   stateRef.current = state
 
-  const [recordMode, setRecordMode] = useState<RecordMode>('one-app')
-  const [selectedAppId, setSelectedAppId] = useState('chrome')
-  const [narrate, setNarrate] = useState(true)
+  const [recordMode, setRecordModeState] = useState<RecordMode>('one-app')
+  const [selectedAppId, setSelectedAppIdState] = useState('chrome')
+  const [narrate, setNarrateState] = useState(true)
+  const settingsReadyRef = useRef(false)
 
   const [elapsed, setElapsed] = useState(0)
   const [recordPaused, setRecordPaused] = useState(false)
   const [watchLog, setWatchLog] = useState<WatchEntry[]>([])
   const [watchExpanded, setWatchExpanded] = useState(false)
 
-  const [workflow, setWorkflow] = useState<Workflow>(MOCK_WORKFLOW)
+  const [workflow, setWorkflow] = useState<Workflow>(() => createMockDraft(newId('draft')))
   const [editorCollapsed, setEditorCollapsed] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
 
   const [panelPlacement, setPanelPlacement] = useState<'above' | 'below'>('above')
   const [hoverFading, setHoverFading] = useState(false)
@@ -135,31 +200,106 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const openAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [runSteps, setRunSteps] = useState<RunStep[]>([])
+  const runStepsRef = useRef<RunStep[]>([])
+  runStepsRef.current = runSteps
   const [runPaused, setRunPaused] = useState(false)
   const [runCollapsed, setRunCollapsed] = useState(false)
   const [runElapsed, setRunElapsed] = useState(0)
+  const runElapsedRef = useRef(0)
+  runElapsedRef.current = runElapsed
   /** True when a paused run is waiting behind the editor (Edit during a run). */
   const runInFlightRef = useRef(false)
+  const activeRunRef = useRef<ActiveRun | null>(null)
+  const runPersistedRef = useRef(false)
+  const errorHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdMirroredRef = useRef<string | null>(null)
 
   const [summaryOutcome, setSummaryOutcome] = useState<SummaryOutcome>('done')
 
-  // ── Toast auto-clear ──
+  // ── Hydrate last-used record settings from the shared store ──
   useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 2200)
+    let cancelled = false
+    window.ghostBridge?.getSnapshot?.().then((snap) => {
+      if (cancelled || !snap) return
+      setRecordModeState(snap.recordSettings.recordMode)
+      setSelectedAppIdState(snap.recordSettings.selectedAppId)
+      setNarrateState(snap.recordSettings.narrate)
+      settingsReadyRef.current = true
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const persistRecordSettings = useCallback(
+    (next: { recordMode: RecordMode; narrate: boolean; selectedAppId: string }) => {
+      if (!settingsReadyRef.current) return
+      window.ghostBridge?.setRecordSettings?.(next)
+    },
+    []
+  )
+
+  const setRecordMode = useCallback(
+    (m: RecordMode) => {
+      setRecordModeState(m)
+      persistRecordSettings({ recordMode: m, narrate, selectedAppId })
+    },
+    [narrate, persistRecordSettings, selectedAppId]
+  )
+
+  const setSelectedAppId = useCallback(
+    (id: string) => {
+      setSelectedAppIdState(id)
+      persistRecordSettings({ recordMode, narrate, selectedAppId: id })
+    },
+    [narrate, persistRecordSettings, recordMode]
+  )
+
+  const setNarrate = useCallback(
+    (v: boolean) => {
+      setNarrateState(v)
+      persistRecordSettings({ recordMode, narrate: v, selectedAppId })
+    },
+    [persistRecordSettings, recordMode, selectedAppId]
+  )
+
+  // ── Keep main's context-menu variant in sync ──
+  useEffect(() => {
+    window.ghostBridge?.setPillAppState?.(state)
+  }, [state])
+
+  // ── Editor ink-20 scrim ──
+  useEffect(() => {
+    const show = state === 'editor' && !editorCollapsed
+    window.ghostBridge?.setEditorScrim?.(show)
+    return () => {
+      window.ghostBridge?.setEditorScrim?.(false)
+    }
+  }, [state, editorCollapsed])
+
+  // ── Saved pill auto-clear (~6s) ──
+  useEffect(() => {
+    if (!savedConfirm) return
+    const t = setTimeout(() => setSavedConfirm(null), SAVED_PILL_MS)
     return () => clearTimeout(t)
-  }, [toast])
+  }, [savedConfirm])
+
+  const dismissSavedConfirm = useCallback(() => setSavedConfirm(null), [])
+
+  const openSavedInLibrary = useCallback(() => {
+    const id = savedConfirm?.workflowId
+    setSavedConfirm(null)
+    if (id) window.ghostBridge?.openWorkspace?.(id)
+    else window.ghostBridge?.openWorkspace?.()
+  }, [savedConfirm])
 
   // ── Sync window bounds with state ──
-  // Collapsed states size the window to the pill exactly ('pill' mode);
-  // expanded states use 'panel' mode with padding.
   useEffect(() => {
     type Size = { w: number; h: number; mode: 'pill' | 'glass' | 'panel' }
-    // Hover ('glass') hugs its content: panel + 8px gap + 24px pill.
-    // Clamp so a bad measure from a previous close can't shrink the open target.
     const glassPanelH = Math.max(hoverPanelH, HOVER_PANEL_H)
+    const idleW = savedConfirm ? 210 : 94
     const sizes: Record<AppState, Size> = {
-      idle: { w: toast ? 140 : 94, h: 24, mode: 'pill' },
+      idle: { w: idleW, h: 24, mode: 'pill' },
       hover: { w: 266, h: glassPanelH + 8 + 24, mode: 'glass' },
       recording: watchExpanded
         ? { w: 300, h: 330, mode: 'panel' }
@@ -170,20 +310,17 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
         : { w: 700, h: 590, mode: 'panel' },
       running: runCollapsed
         ? { w: 230, h: 24, mode: 'pill' }
-        : { w: 490, h: 380, mode: 'panel' },
+        : { w: 490, h: 420, mode: 'panel' },
       summary: { w: 380, h: 380, mode: 'panel' }
     }
     const { w, h, mode } = sizes[state]
     const prev = prevStateRef.current
     prevStateRef.current = state
-    // closeHover owns the glass→pill ease; don't let panel height churn reopen it.
     if (hoverClosingRef.current && state === 'hover') return
     const isOpenTransition = prev === 'idle' && state === 'hover'
-    // Height corrections mid-open cancel the ease and reflow text — defer them.
     if (state === 'hover' && !isOpenTransition && hoverOpenAnimRef.current) {
       return
     }
-    // Idle → hover: pill-driven morph (width stretch, then height reveal).
     const durationMs = isOpenTransition ? 420 : 0
     const pillDrive = isOpenTransition
     if (isOpenTransition) {
@@ -195,14 +332,14 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
         const pending = pendingHoverHRef.current
         pendingHoverHRef.current = null
         if (pending != null) {
-          setHoverPanelH((prev) => (prev === pending ? prev : pending))
+          setHoverPanelH((prevH) => (prevH === pending ? prevH : pending))
         }
       }, 440)
     }
     window.ghostBridge?.setBounds?.(w, h, mode, { durationMs, pillDrive })?.then((placement) => {
       if (placement) setPanelPlacement(placement)
     })
-  }, [state, watchExpanded, editorCollapsed, runCollapsed, toast, hoverPanelH])
+  }, [state, watchExpanded, editorCollapsed, runCollapsed, savedConfirm, hoverPanelH])
 
   // ── Recording timer ──
   useEffect(() => {
@@ -232,18 +369,100 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (state !== 'organizing') return
     const t = setTimeout(() => {
-      setWorkflow(MOCK_WORKFLOW)
+      setWorkflow(createMockDraft(newId('draft')))
       setEditorCollapsed(false)
       setState('editor')
     }, 2000)
     return () => clearTimeout(t)
   }, [state])
 
-  // ── Run engine (flat ledger) ──
+  // ── Persist Run when entering summary ──
+  useEffect(() => {
+    if (state !== 'summary') return
+    const active = activeRunRef.current
+    if (!active || runPersistedRef.current) return
+    runPersistedRef.current = true
+    const record = buildRunRecord(
+      active,
+      runStepsRef.current,
+      summaryOutcome,
+      runElapsedRef.current
+    )
+    window.ghostBridge?.saveRun?.(record)
+  }, [state, summaryOutcome])
+
   const hasQuestionHold = runSteps.some(
     (s) => s.status === 'question' && s.question?.answerId === null
   )
+  const hasErrorHold = runSteps.some((s) => s.status === 'error' && !s.error?.takenOver)
+  const holdActive = hasQuestionHold || hasErrorHold
 
+  // ── Mirror holds into Activity (Phase 3 renders 2.5) ──
+  useEffect(() => {
+    if (state !== 'running') return
+    const active = activeRunRef.current
+    if (!active) return
+    const held = runSteps.find(
+      (s) =>
+        (s.status === 'question' && s.question?.answerId === null) ||
+        (s.status === 'error' && !s.error?.takenOver)
+    )
+    if (!held) {
+      if (holdMirroredRef.current) {
+        window.ghostBridge?.clearActivityHold?.(active.id)
+        holdMirroredRef.current = null
+      }
+      return
+    }
+    const key = `${held.id}:${held.status}`
+    if (holdMirroredRef.current === key) return
+    holdMirroredRef.current = key
+    window.ghostBridge?.upsertActivityHold?.({
+      runId: active.id,
+      workflowId: active.workflowId,
+      name: workflow.name,
+      needsYou: held.status === 'error' ? 'help' : 'answer',
+      heldStepIndex: held.index,
+      waitingSince: new Date().toISOString()
+    })
+  }, [state, runSteps, workflow.name])
+
+  // ── 10-min error hold auto-stop ──
+  useEffect(() => {
+    if (errorHoldTimerRef.current) {
+      clearTimeout(errorHoldTimerRef.current)
+      errorHoldTimerRef.current = null
+    }
+    if (state !== 'running' || !hasErrorHold) return
+    const held = runSteps.find((s) => s.status === 'error' && !s.error?.takenOver)
+    if (!held) return
+    errorHoldTimerRef.current = setTimeout(() => {
+      const active = activeRunRef.current
+      if (active) {
+        active.stopReason = `Stopped — needed help at step ${held.index}`
+        window.ghostBridge?.upsertActivityHold?.({
+          runId: active.id,
+          workflowId: active.workflowId,
+          name: workflow.name,
+          needsYou: 'help',
+          heldStepIndex: held.index,
+          waitingSince: new Date().toISOString(),
+          stopReason: active.stopReason
+        })
+      }
+      runInFlightRef.current = false
+      setSummaryOutcome('stopped')
+      setState('summary')
+    }, ERROR_HOLD_MS)
+    return () => {
+      if (errorHoldTimerRef.current) {
+        clearTimeout(errorHoldTimerRef.current)
+        errorHoldTimerRef.current = null
+      }
+    }
+  }, [state, hasErrorHold, runSteps, workflow.name])
+
+  // ── Run engine (flat ledger) ──
   useEffect(() => {
     if (state !== 'running' || runPaused) return
     const t = setInterval(() => setRunElapsed((e) => e + 1), 1000)
@@ -251,18 +470,32 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [state, runPaused])
 
   useEffect(() => {
-    if (state !== 'running' || runPaused || hasQuestionHold) return
+    if (state !== 'running' || runPaused || holdActive) return
     const t = setInterval(() => {
       setRunSteps((steps) => {
         const next = steps.map((s) => ({ ...s }))
-        const active = next.find((s) => s.status === 'active' || s.status === 'question')
+        const active = next.find(
+          (s) => s.status === 'active' || isHoldStatus(s.status)
+        )
         if (active) {
           if (active.status === 'question' && active.question?.answerId === null) return steps
+          if (active.status === 'error' && !active.error?.takenOver) return steps
+          // Mock failure: first attempt at a marked step becomes an error hold.
+          if (active.status === 'active' && active.mockFailOnce) {
+            active.mockFailOnce = false
+            active.status = 'error'
+            active.error = {
+              message: 'Couldn’t find a page named “Crit” in this file.'
+            }
+            setRunCollapsed(false)
+            return next
+          }
           active.status = 'done'
         }
         const pending = next.find((s) => s.status === 'pending')
         if (pending) {
-          pending.status = pending.question && pending.question.answerId === null ? 'question' : 'active'
+          pending.status =
+            pending.question && pending.question.answerId === null ? 'question' : 'active'
           if (pending.status === 'question') setRunCollapsed(false)
         } else {
           setSummaryOutcome('done')
@@ -272,11 +505,23 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       })
     }, RUN_TICK_MS)
     return () => clearInterval(t)
-  }, [state, runPaused, hasQuestionHold])
+  }, [state, runPaused, holdActive])
 
   const answerQuestion = useCallback((stepId: string, optionId: string, custom?: string) => {
-    setRunSteps((steps) =>
-      steps.map((s) =>
+    setRunSteps((steps) => {
+      const target = steps.find((s) => s.id === stepId)
+      const option = target?.question?.options.find((o) => o.id === optionId)
+      if (activeRunRef.current && target?.question) {
+        activeRunRef.current.questionReceipts.push({
+          stepId,
+          prompt: target.question.prompt,
+          answerId: optionId,
+          answerLabel: custom?.trim() || option?.label || optionId,
+          customValue: custom,
+          answeredAt: new Date().toISOString()
+        })
+      }
+      return steps.map((s) =>
         s.id === stepId && s.question
           ? {
               ...s,
@@ -285,7 +530,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
             }
           : s
       )
-    )
+    })
   }, [])
 
   /** Skip any not-done step — including steps later than the current one. */
@@ -294,13 +539,18 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       const next = steps.map((s) => ({ ...s }))
       const target = next.find((s) => s.id === stepId)
       if (!target || target.status === 'done' || target.status === 'skipped') return steps
-      const wasCurrent = target.status === 'active' || target.status === 'question'
+      const wasCurrent =
+        target.status === 'active' ||
+        target.status === 'question' ||
+        target.status === 'error'
       target.status = 'skipped'
+      target.error = undefined
       if (wasCurrent) {
         const pending = next.find((s) => s.status === 'pending')
         if (pending) {
           pending.status =
             pending.question && pending.question.answerId === null ? 'question' : 'active'
+          if (pending.status === 'question') setRunCollapsed(false)
         } else {
           setSummaryOutcome('done')
           setTimeout(() => setState('summary'), 600)
@@ -310,15 +560,53 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const resolveError = useCallback(
+    (stepId: string, action: 'retry' | 'skip' | 'takeover') => {
+      if (action === 'skip') {
+        skipStep(stepId)
+        return
+      }
+      if (action === 'retry') {
+        setRunSteps((steps) =>
+          steps.map((s) =>
+            s.id === stepId
+              ? { ...s, status: 'active', error: undefined, mockFailOnce: false }
+              : s
+          )
+        )
+        return
+      }
+      // Take over — pause; resume continues from the next step.
+      setRunSteps((steps) => {
+        const next = steps.map((s) => ({ ...s }))
+        const target = next.find((s) => s.id === stepId)
+        if (!target) return steps
+        target.status = 'done'
+        target.error = undefined
+        const pending = next.find((s) => s.status === 'pending')
+        if (pending) {
+          pending.status =
+            pending.question && pending.question.answerId === null ? 'question' : 'active'
+        }
+        return next
+      })
+      setRunPaused(true)
+    },
+    [skipStep]
+  )
+
   const runDoneCount = runSteps.filter(
     (s) => s.status === 'done' || s.status === 'skipped'
   ).length
 
-  // ── Summary meta ──
+  // ── Summary meta: "Done · 6 of 6 · 1:12" / "Stopped · 3 of 6 · 1:12" ──
   const summaryMeta = useMemo(() => {
     const time = formatElapsed(runElapsed)
-    if (summaryOutcome === 'done') return `Completed · ${time}`
-    return `Stopped · ${runDoneCount}/${runSteps.length} · ${time}`
+    const total = runSteps.length
+    if (summaryOutcome === 'done') return `Done · ${total} of ${total} · ${time}`
+    const active = activeRunRef.current
+    if (active?.stopReason) return active.stopReason
+    return `Stopped · ${runDoneCount} of ${total} · ${time}`
   }, [summaryOutcome, runElapsed, runDoneCount, runSteps.length])
 
   // ── Transitions ──
@@ -332,12 +620,11 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const openHover = useCallback(() => {
-    // Opening and dragging are mutually exclusive — never open mid-drag.
     if (draggingRef.current || hoverClosingRef.current) return
+    setSavedConfirm(null)
     setHoverFading(false)
     setHoverDismissMode(null)
     pendingHoverHRef.current = null
-    // Repair if a previous close stored a clipped height (e.g. 81 → open to 113).
     if (hoverPanelHRef.current < HOVER_PANEL_MEASURE_MIN) {
       setHoverPanelH(HOVER_PANEL_H)
     }
@@ -346,7 +633,6 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
 
   const reportHoverPanelHeight = useCallback((h: number) => {
     const next = Math.round(h)
-    // Closing frames measure a clipped panel (~81) — that poisoned the next open.
     if (hoverClosingRef.current || stateRef.current !== 'hover') return
     if (next < HOVER_PANEL_MEASURE_MIN) return
     if (hoverOpenAnimRef.current) {
@@ -356,17 +642,12 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setHoverPanelH((prev) => (Math.abs(prev - next) <= 2 ? prev : next))
   }, [])
 
-  /**
-   * Dismiss the hover panel by morphing it back into the pill, then idle.
-   * Re-entrant while a close is already animating.
-   */
   const closeHover = useCallback(() => {
     if (stateRef.current !== 'hover' || hoverClosingRef.current) return
     hoverClosingRef.current = true
     pendingHoverHRef.current = null
     setHoverDismissMode('morph')
     setHoverFading(true)
-    // Pill-driven close: collapse height onto the pill, then shrink width.
     window.ghostBridge?.setBounds?.(94, 24, 'pill', {
       durationMs: 400,
       pillDrive: true
@@ -379,10 +660,6 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     }, 400)
   }, [])
 
-  /**
-   * Drag start. While the record panel is open, keep the glass UI and drag
-   * it — closing is a click (no drag), same press/move threshold as opening.
-   */
   const beginDrag = useCallback((): { collapseToPill: boolean } => {
     draggingRef.current = true
     return { collapseToPill: stateRef.current !== 'hover' }
@@ -394,6 +671,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
 
   const startRecording = useCallback(() => {
     runInFlightRef.current = false
+    setSavedConfirm(null)
     resetRecording()
     setState('recording')
   }, [resetRecording])
@@ -403,41 +681,54 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setState('idle')
   }, [resetRecording])
 
-  /** "Finish" in the ledger — the only stop control. */
   const finishRecording = useCallback(() => {
     setState('organizing')
   }, [])
 
-  /** Editor "Cancel" (after confirm) — discards the draft entirely. */
   const cancelEditor = useCallback(() => {
     runInFlightRef.current = false
     setState('idle')
   }, [])
 
+  const beginRun = useCallback((wf: Workflow) => {
+    const steps = makeRunSteps(wf)
+    if (steps.length > 0) steps[0].status = 'active'
+    setWorkflow(wf)
+    setRunSteps(steps)
+    setRunPaused(false)
+    setRunCollapsed(false)
+    setRunElapsed(0)
+    setSavedConfirm(null)
+    activeRunRef.current = {
+      id: newId('run'),
+      workflowId: wf.id,
+      startedAt: new Date().toISOString(),
+      questionReceipts: []
+    }
+    holdMirroredRef.current = null
+    runPersistedRef.current = false
+    setState('running')
+  }, [])
+
   const runWorkflow = useCallback(() => {
     if (runInFlightRef.current) {
-      // Resuming a run paused for editing — changes apply from the next
-      // step onward; completed steps are not re-run.
       runInFlightRef.current = false
       setRunPaused(false)
       setEditorCollapsed(false)
       setState('running')
       return
     }
-    const steps = makeRunSteps(workflow)
-    if (steps.length > 0) steps[0].status = 'active'
-    setRunSteps(steps)
-    setRunPaused(false)
-    setRunCollapsed(false)
-    setRunElapsed(0)
-    setState('running')
-  }, [workflow])
+    // Run saves into history first, then runs.
+    window.ghostBridge?.upsertWorkflow?.(workflow)
+    beginRun(workflow)
+  }, [beginRun, workflow])
 
   const saveWorkflow = useCallback(() => {
     runInFlightRef.current = false
-    setToast('Workflow saved!')
+    window.ghostBridge?.upsertWorkflow?.(workflow)
+    setSavedConfirm({ workflowId: workflow.id })
     setState('idle')
-  }, [])
+  }, [workflow])
 
   const editFromRunning = useCallback(() => {
     runInFlightRef.current = true
@@ -452,17 +743,21 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
 
   const stopRunning = useCallback(() => {
     runInFlightRef.current = false
+    if (activeRunRef.current) activeRunRef.current.stopReason = undefined
     setSummaryOutcome('stopped')
     setState('summary')
   }, [])
 
   const finishSummary = useCallback(() => {
     runInFlightRef.current = false
+    activeRunRef.current = null
+    holdMirroredRef.current = null
     setState('idle')
   }, [])
 
-  /** "Run remaining": the stopped step resumes from where it held. */
   const runRemaining = useCallback(() => {
+    runPersistedRef.current = false
+    if (activeRunRef.current) activeRunRef.current.stopReason = undefined
     setRunPaused(false)
     setRunCollapsed(false)
     setState('running')
@@ -471,20 +766,20 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   // ── Commands from the workspace window / global hotkey ──
   useEffect(() => {
     const offRecord = window.ghostBridge?.onOpenRecordPanel?.(() => {
-      setState((s) => (s === 'idle' ? 'hover' : s))
+      setSavedConfirm(null)
+      setState((s) => (s === 'idle' || s === 'hover' ? 'hover' : s))
     })
-    const offRun = window.ghostBridge?.onRunWorkflow?.(() => {
+    const offRun = window.ghostBridge?.onRunWorkflow?.(async (workflowId) => {
       runInFlightRef.current = false
-      const steps = makeRunSteps(MOCK_WORKFLOW)
-      if (steps.length > 0) steps[0].status = 'active'
-      setRunSteps(steps)
-      setRunPaused(false)
-      setRunCollapsed(false)
-      setRunElapsed(0)
-      setState('running')
+      const fromStore = await window.ghostBridge?.getWorkflow?.(workflowId)
+      if (!fromStore) {
+        console.warn(`[pill] runWorkflow: workflow ${workflowId} not in store`)
+        return
+      }
+      beginRun(fromStore)
     })
     const offEditor = window.ghostBridge?.onOpenEditor?.(() => {
-      setWorkflow(MOCK_WORKFLOW)
+      setWorkflow(createMockDraft(newId('draft')))
       setEditorCollapsed(false)
       setState('editor')
     })
@@ -493,7 +788,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       offRun?.()
       offEditor?.()
     }
-  }, [])
+  }, [beginRun])
 
   const value: WorkflowContextValue = {
     state,
@@ -513,7 +808,9 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     setWorkflow,
     editorCollapsed,
     setEditorCollapsed,
-    toast,
+    savedConfirm,
+    openSavedInLibrary,
+    dismissSavedConfirm,
     panelPlacement,
     hoverFading,
     hoverDismissMode,
@@ -527,7 +824,9 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     runElapsedLabel: formatElapsed(runElapsed),
     runDoneCount,
     hasQuestionHold,
+    hasErrorHold,
     answerQuestion,
+    resolveError,
     skipStep,
     summaryOutcome,
     summaryMeta,

@@ -4,8 +4,8 @@ import type { RunStep } from '../../state/types'
 import AppChip from '../shared/AppChip'
 
 /**
- * 07 — summary recap. Per-step rows with chevrons that expand detail;
- * app chips and voice quotes preserved. Meta leads with the outcome.
+ * 07 — summary recap. Meta: "Done · 6 of 6 · 1:12" / "Stopped · 3 of 6 · 1:12".
+ * Row states: done · done-voice · held (rose) · skipped · not-yet.
  */
 export default function SummaryPanel() {
   const {
@@ -24,7 +24,7 @@ export default function SummaryPanel() {
   return (
     <div className="summary-panel">
       <div className="summary-head">
-        <div className="summary-title">{workflow.title}</div>
+        <div className="summary-title">{workflow.name}</div>
         <div className="meta">{summaryMeta}</div>
       </div>
 
@@ -37,7 +37,10 @@ export default function SummaryPanel() {
             onToggle={() => setExpandedId(expandedId === step.id ? null : step.id)}
             highlighted={
               previewRemaining &&
-              (step.status === 'active' || step.status === 'question' || step.status === 'pending')
+              (step.status === 'active' ||
+                step.status === 'question' ||
+                step.status === 'error' ||
+                step.status === 'pending')
             }
           />
         ))}
@@ -80,29 +83,35 @@ function SummaryStepRow({
 }) {
   const isDone = step.status === 'done'
   const isSkipped = step.status === 'skipped'
-  const isPausedHere = step.status === 'active' || step.status === 'question'
+  const isHeld =
+    step.status === 'active' || step.status === 'question' || step.status === 'error'
   const isNotYet = step.status === 'pending'
+  const isVoice = isDone && !!step.voiceNote
 
   return (
     <div>
       <button
-        className={`run-step summary-row ${isPausedHere ? 'summary-row-paused' : ''} ${
+        className={`run-step summary-row ${isHeld ? 'summary-row-held' : ''} ${
           highlighted ? 'summary-row-highlight' : ''
-        } ${isDone || isSkipped ? 'run-step-past' : ''} ${isNotYet ? 'summary-row-notyet' : ''}`}
+        } ${isDone || isSkipped ? 'run-step-past' : ''} ${isNotYet ? 'summary-row-notyet' : ''} ${
+          isVoice ? 'summary-row-voice' : ''
+        }`}
         onClick={onToggle}
       >
         <span className="step-num">{step.index}</span>
         <div className="run-step-body">
-          <span className={`run-step-label ${isPausedHere ? 'run-step-label-current' : ''}`}>
+          <span className={`run-step-label ${isHeld ? 'run-step-label-current' : ''}`}>
             {isDone ? step.doneLabel : step.label}
             {step.app && <AppChip app={step.app} muted={isDone || isSkipped || isNotYet} />}
           </span>
           {step.voiceNote && (
-            <span className="run-voice-quote">{step.voiceNote.text.replace(/[“”"…]/g, '').replace(/^\.{3}/, '')}</span>
+            <span className="run-voice-quote">
+              {step.voiceNote.text.replace(/[“”"…]/g, '').replace(/^\.{3}/, '')}
+            </span>
           )}
         </div>
-        {isPausedHere ? (
-          <PauseBars />
+        {isHeld ? (
+          <HeldBars />
         ) : isSkipped ? (
           <span className="run-skipped-mark">Skipped</span>
         ) : (
@@ -113,7 +122,10 @@ function SummaryStepRow({
         <div className="summary-detail">
           {isDone && `Completed in 12s — ${step.doneLabel}.`}
           {isSkipped && 'Skipped by you during the run.'}
-          {isPausedHere && 'The run stopped while this step was in progress.'}
+          {isHeld &&
+            (step.status === 'error'
+              ? step.error?.message || 'The run needed help at this step.'
+              : 'The run stopped while this step was in progress.')}
           {isNotYet && 'Not reached — will run in full with "Run remaining".'}
         </div>
       )}
@@ -121,11 +133,11 @@ function SummaryStepRow({
   )
 }
 
-function PauseBars() {
+function HeldBars() {
   return (
-    <svg width="8" height="8" viewBox="0 0 8 8" className="summary-pausebars">
-      <rect x="1" width="2" height="8" rx="1" fill="rgba(217,107,80,0.85)" />
-      <rect x="5" width="2" height="8" rx="1" fill="rgba(217,107,80,0.85)" />
+    <svg width="8" height="8" viewBox="0 0 8 8" className="summary-heldbars">
+      <rect x="1" width="2" height="8" rx="1" fill="var(--rose)" />
+      <rect x="5" width="2" height="8" rx="1" fill="var(--rose)" />
     </svg>
   )
 }
