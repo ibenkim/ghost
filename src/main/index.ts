@@ -22,7 +22,16 @@ import {
   stopPermissionWatch
 } from './permissions'
 import { googleAuth, isValidEmail, sessionForEmail } from './auth'
-import { createTeam, isValidInviteCode, teamFromInvite } from './team'
+import {
+  createTeam,
+  inviteToTeam,
+  isValidInviteCode,
+  removeMember,
+  renameTeam,
+  resendInvite,
+  revokeInvite,
+  teamFromInvite
+} from './team'
 import { newId } from '../shared/id'
 import type { DeepLink, PermissionsState } from '../shared/types'
 
@@ -1053,8 +1062,10 @@ function registerOnboardingIpc() {
 
   // ── Mocked team ──
   ipcMain.handle('team:create', () => {
-    const team = createTeam(getSnapshot().session)
+    const session = getSnapshot().session
+    const team = createTeam(session)
     setTeam(team)
+    if (session) setSession({ ...session, role: 'owner' })
     setOnboardingStep('permissions')
     return team
   })
@@ -1062,14 +1073,41 @@ function registerOnboardingIpc() {
     if (!isValidInviteCode(code)) {
       return { ok: false, error: 'That link didn’t work — ask your team owner to re-send' }
     }
-    const team = teamFromInvite(code)
+    const session = getSnapshot().session
+    const team = teamFromInvite(code, session)
     setTeam(team)
+    if (session) setSession({ ...session, role: 'member' })
     setOnboardingStep('permissions')
     return { ok: true, team }
   })
   ipcMain.handle('team:preview', (_e, code: string) => {
     if (!isValidInviteCode(code)) return { ok: false }
-    return { ok: true, team: teamFromInvite(code) }
+    return { ok: true, team: teamFromInvite(code, getSnapshot().session) }
+  })
+  ipcMain.handle('team:rename', (_e, name: string) => {
+    const next = renameTeam(getSnapshot().team, name)
+    if (next) setTeam(next)
+    return next
+  })
+  ipcMain.handle('team:invite', (_e, email: string) => {
+    const result = inviteToTeam(getSnapshot().team, email)
+    if (result.team && !result.error) setTeam(result.team)
+    return result
+  })
+  ipcMain.handle('team:resendInvite', (_e, inviteId: string) => {
+    const next = resendInvite(getSnapshot().team, inviteId)
+    if (next) setTeam(next)
+    return next
+  })
+  ipcMain.handle('team:revokeInvite', (_e, inviteId: string) => {
+    const next = revokeInvite(getSnapshot().team, inviteId)
+    if (next) setTeam(next)
+    return next
+  })
+  ipcMain.handle('team:removeMember', (_e, memberId: string) => {
+    const next = removeMember(getSnapshot().team, memberId)
+    if (next) setTeam(next)
+    return next
   })
 }
 

@@ -38,6 +38,8 @@ export type {
   RunStepResult,
   RunStepStatus,
   ScheduleCadence,
+  Invite,
+  Member,
   Session,
   StepApp,
   Team,

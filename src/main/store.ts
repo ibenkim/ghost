@@ -15,6 +15,7 @@ import type {
   Team,
   Workflow
 } from '../shared/types'
+import { normalizeTeam } from './team'
 
 const ONBOARDING_STEPS: OnboardingStep[] = ['welcome', 'team', 'permissions', 'complete']
 
@@ -49,7 +50,7 @@ function normalizeSnapshot(raw: unknown): StoreSnapshot {
     onboardingComplete: Boolean(data.onboardingComplete),
     onboardingStep: normalizeStep(data.onboardingStep),
     session: data.session ?? null,
-    team: data.team ?? null,
+    team: normalizeTeam(data.team ?? null, data.session ?? null),
     micSkipped: Boolean(data.micSkipped),
     permissionToastDismissedAt: data.permissionToastDismissedAt ?? null,
     lastPermissionRevokeAt: data.lastPermissionRevokeAt ?? null

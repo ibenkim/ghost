@@ -648,3 +648,136 @@
   color: #000;
   text-decoration: underline;
 }
+
+/* ── Manage Team (owner) ── */
+.manage-header-left {
+  min-width: 0;
+  flex: 1;
+}
+.manage-header-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.manage-rename-input {
+  font-size: 13px;
+  width: min(320px, 100%);
+}
+.manage-invite-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.manage-invite-field input {
+  width: 220px;
+  height: 27px;
+  border: 1px solid var(--text-40);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+}
+.manage-invite-field-error input {
+  border-color: var(--rose);
+}
+.manage-invite-error {
+  font-size: 11px;
+  color: var(--rose);
+  line-height: 1.2;
+}
+.manage-section {
+  margin-bottom: 18px;
+}
+.manage-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-40);
+  letter-spacing: 0.02em;
+  margin: 0 0 8px 14px;
+}
+.manage-member-row {
+  cursor: default;
+}
+.manage-member-row .ws-row-name {
+  font-weight: 500;
+}
+.manage-role-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  height: 21px;
+  padding: 0 10px;
+  border: 1px solid var(--text-40);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-40);
+  background: transparent;
+}
+.manage-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-40);
+  border-radius: 4px;
+  opacity: 0;
+  cursor: pointer;
+}
+.manage-member-removable:hover .manage-remove-btn {
+  opacity: 1;
+}
+.manage-remove-btn:hover {
+  color: var(--text);
+}
+.manage-invite-row {
+  cursor: default;
+  gap: 8px;
+  padding-left: 11px;
+  padding-right: 11px;
+}
+.manage-invite-email {
+  font-size: 12px;
+  color: rgba(161, 161, 171, 0.8);
+  flex-shrink: 0;
+}
+.manage-invite-age {
+  font-size: 11px;
+  color: var(--text-40);
+  flex-shrink: 0;
+}
+.manage-invite-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+.manage-invite-resend {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: rgba(161, 161, 171, 0.8);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.manage-invite-revoke {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--rose);
+  cursor: pointer;
+}
+.manage-invite-row-expired .manage-invite-email,
+.manage-invite-row-expired .manage-invite-age {
+  color: var(--text-30);
+  opacity: 0.75;
+}

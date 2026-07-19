@@ -242,6 +242,8 @@ export type PillPosition = {
 export type Session = {
   email: string
   displayName: string
+  /** Mirrors the active team's role once the user has a team. */
+  role?: TeamRole
 } | null
 
 /** Which onboarding card the app resumes to on relaunch (hard gate). */
@@ -249,12 +251,35 @@ export type OnboardingStep = 'welcome' | 'team' | 'permissions' | 'complete'
 
 export type TeamRole = 'owner' | 'member'
 
-/** Minimal team model created/joined during onboarding — Phase 5 extends it. */
+/** A person on the team roster (Manage · MEMBERS). */
+export type Member = {
+  id: string
+  name: string
+  email?: string
+  role: TeamRole
+  /** Signed-in user — no remove ✕ on their own row. */
+  isSelf?: boolean
+}
+
+/** Pending email invite (Manage · INVITED). Expires 14 days after `invitedAt`. */
+export type Invite = {
+  id: string
+  email: string
+  invitedAt: string
+  code: string
+}
+
+/**
+ * Team created/joined during onboarding. Phase 5 adds members / invites;
+ * `memberCount` mirrors `members.length` for header metrics.
+ */
 export type Team = {
   id: string
   name: string
   memberCount: number
   role: TeamRole
+  members: Member[]
+  invites: Invite[]
 } | null
 
 /** macOS privacy permissions yuh preflights before recording / running. */

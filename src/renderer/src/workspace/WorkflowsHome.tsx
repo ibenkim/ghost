@@ -7,6 +7,7 @@ export default function WorkflowsHome({
   workflows,
   hoursLine,
   suggestion,
+  ownerTeamSize,
   onOpen,
   onToggleStatus,
   onDiscardSuggestion
@@ -14,6 +15,8 @@ export default function WorkflowsHome({
   workflows: Workflow[]
   hoursLine: string
   suggestion: Suggestion | null
+  /** When set, home header uses the owner team metric. */
+  ownerTeamSize?: number
   onOpen: (id: string) => void
   onToggleStatus: (id: string) => void
   onDiscardSuggestion: () => void
@@ -53,12 +56,25 @@ export default function WorkflowsHome({
     )
   }
 
+  // Owner: "6 workflows · Team of 4 · ≈ 21 h returned this month"
+  // Employee: title count + hours sub-line (unchanged).
+  const hoursMetric = hoursLine.startsWith('≈') ? hoursLine : `≈ ${hoursLine}`
+  const isOwnerHeader = ownerTeamSize != null
+
   return (
     <div className="ws-view">
       <div className="ws-header">
         <div>
-          <div className="ws-header-title">{workflows.length} workflows</div>
-          <div className="ws-header-sub">{hoursLine}</div>
+          {isOwnerHeader ? (
+            <div className="ws-header-title">
+              {workflows.length} workflows · Team of {ownerTeamSize} · {hoursMetric}
+            </div>
+          ) : (
+            <>
+              <div className="ws-header-title">{workflows.length} workflows</div>
+              <div className="ws-header-sub">{hoursLine}</div>
+            </>
+          )}
         </div>
         <button
           className="btn-small-outline"

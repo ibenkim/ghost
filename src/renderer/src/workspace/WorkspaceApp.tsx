@@ -6,6 +6,7 @@ import type {
   Run,
   StoreSnapshot,
   Suggestion,
+  Team,
   Workflow,
   WorkspaceFocus
 } from '../state/types'
@@ -13,13 +14,14 @@ import Sidebar from './Sidebar'
 import WorkflowsHome from './WorkflowsHome'
 import WorkflowDetail from './WorkflowDetail'
 import ActivityView from './ActivityView'
+import ManageView from './ManageView'
 
-export type WorkspaceNav = 'workflows' | 'activity'
+export type WorkspaceNav = 'workflows' | 'activity' | 'manage'
 
-export type Space = 'Personal' | "Harry's team"
+export type Space = string
 
 /**
- * Employee Workspace — subscribed to the shared main-process store.
+ * Shared Workspace shell — employee baseline plus owner Manage + header metric.
  * Desktop pill mutations broadcast via `store:changed` keep this in sync.
  */
 export default function WorkspaceApp() {
@@ -33,6 +35,7 @@ export default function WorkspaceApp() {
   const [runs, setRuns] = useState<Run[]>([])
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [team, setTeam] = useState<Team>(null)
   const [ready, setReady] = useState(false)
 
   function applySnapshot(snap: StoreSnapshot) {
@@ -40,6 +43,7 @@ export default function WorkspaceApp() {
     setRuns(snap.runs)
     setSuggestion(snap.suggestion)
     setActivity(snap.activity)
+    setTeam(snap.team)
     setReady(true)
   }
 
@@ -86,9 +90,27 @@ export default function WorkspaceApp() {
     }
   }, [])
 
-  const spaceWorkflows = space === 'Personal' ? workflows : []
-  const spaceActivity = space === 'Personal' ? activity : []
-  const spaceRuns = space === 'Personal' ? runs : []
+  // If role drops below owner while on Manage, bounce home.
+  useEffect(() => {
+    if (nav === 'manage' && team?.role !== 'owner') {
+      setNav('workflows')
+    }
+  }, [nav, team?.role])
+
+  const isOwner = team?.role === 'owner'
+  const teamSpaceName = team?.name ?? "Harry's team"
+
+  // Keep the team-space selection pointed at the live team name after rename.
+  useEffect(() => {
+    if (space !== 'Personal' && space !== teamSpaceName) {
+      setSpace(teamSpaceName)
+    }
+  }, [space, teamSpaceName])
+
+  const inPersonal = space === 'Personal'
+  const spaceWorkflows = inPersonal ? workflows : []
+  const spaceActivity = inPersonal ? activity : []
+  const spaceRuns = inPersonal ? runs : []
 
   const detail = detailId ? workflows.find((w) => w.id === detailId) ?? null : null
 
@@ -159,6 +181,8 @@ export default function WorkspaceApp() {
         }}
         space={space}
         onSpace={setSpace}
+        team={team}
+        isOwner={isOwner}
       />
       <div className="workspace-content">
         {detail ? (
@@ -185,11 +209,14 @@ export default function WorkspaceApp() {
               setEditStepId(stepId)
             }}
           />
+        ) : nav === 'manage' && team && isOwner ? (
+          <ManageView team={team} />
         ) : nav === 'workflows' ? (
           <WorkflowsHome
             workflows={spaceWorkflows}
             hoursLine={hoursReturnedThisMonth(spaceRuns)}
-            suggestion={space === 'Personal' ? suggestion : null}
+            suggestion={inPersonal ? suggestion : null}
+            ownerTeamSize={isOwner ? team?.memberCount : undefined}
             onOpen={(id) => {
               setDetailId(id)
               setFocusRunId(null)

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { Team } from '../state/types'
 import type { Space, WorkspaceNav } from './WorkspaceApp'
 
 /** Sidebar: traffic lights, team-menu (workspace switcher), nav items. */
@@ -6,15 +7,21 @@ export default function Sidebar({
   nav,
   onNav,
   space,
-  onSpace
+  onSpace,
+  team,
+  isOwner
 }: {
   nav: WorkspaceNav
   onNav: (n: WorkspaceNav) => void
   space: Space
   onSpace: (s: Space) => void
+  team: Team
+  isOwner: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const teamName = team?.name ?? "Harry's team"
+  const spaces: Space[] = ['Personal', teamName]
 
   // Press anywhere outside to dismiss the team menu.
   useEffect(() => {
@@ -25,6 +32,13 @@ export default function Sidebar({
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [menuOpen])
+
+  const switcherLabel =
+    space === 'Personal'
+      ? 'Personal'
+      : isOwner
+        ? `Team  ·  Owner`
+        : teamName
 
   return (
     <aside className="ws-sidebar">
@@ -45,12 +59,12 @@ export default function Sidebar({
       <div className="team-menu-wrap" ref={menuRef}>
         <button className="team-menu-btn" onClick={() => setMenuOpen((o) => !o)}>
           <span className="team-avatar" />
-          <span className="team-name">{space}</span>
+          <span className="team-name">{switcherLabel}</span>
           <ChevronTiny />
         </button>
         {menuOpen && (
           <div className="team-menu">
-            {(['Personal', "Harry's team"] as Space[]).map((s) => (
+            {spaces.map((s) => (
               <button
                 key={s}
                 className={`team-menu-item ${space === s ? 'team-menu-item-active' : ''}`}
@@ -91,6 +105,14 @@ export default function Sidebar({
         >
           Activity
         </button>
+        {isOwner && (
+          <button
+            className={`ws-nav-item ${nav === 'manage' ? 'ws-nav-active' : ''}`}
+            onClick={() => onNav('manage')}
+          >
+            Manage
+          </button>
+        )}
       </nav>
     </aside>
   )

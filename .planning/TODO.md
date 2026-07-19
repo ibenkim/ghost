@@ -238,18 +238,18 @@ New surface; gate the whole app behind it via the persisted onboarding flag.
 Everything matches Employee Workspace except 03-Manage + home header. Extends
 Phase 4's team service with `Member` / `Invite` + a role on the session.
 
-- [ ] Owner home header team metric: "6 workflows · Team of 4 · ≈ 21 h
+- [x] Owner home header team metric: "6 workflows · Team of 4 · ≈ 21 h
       returned this month" (employee keeps personal metric).
-- [ ] 3.1 Manage view inside the workspace (entry point per design ref):
+- [x] 3.1 Manage view inside the workspace (entry point per design ref):
       "Manage Team" header · member count · "Invite to Team" · Edit (inline
       team rename); MEMBERS list with role chips; hover → ✕ (not on owner's
       own row).
-- [ ] 3.2 Invite: inline email field in header area; Enter sends → INVITED row;
+- [x] 3.2 Invite: inline email field in header area; Enter sends → INVITED row;
       invalid → rose stroke + sub-line.
-- [ ] 3.3 INVITED section: email · "invited 2 days ago" · Resend (resets
+- [x] 3.3 INVITED section: email · "invited 2 days ago" · Resend (resets
       timestamp) · Revoke (rose, no confirm); 14-day expiry → grayed "expired",
       Resend remains.
-- [ ] 3.4 Remove confirm dialog (scrim): copy per spec; on remove, member
+- [x] 3.4 Remove confirm dialog (scrim): copy per spec; on remove, member
       leaves list; Activity keeps their past runs attributed; their scheduled
       team runs stop.
 

@@ -88,6 +88,11 @@ declare global {
       teamCreate: () => Promise<Team>
       teamJoin: (code: string) => Promise<JoinResult>
       teamPreview: (code: string) => Promise<InvitePreview>
+      teamRename: (name: string) => Promise<Team>
+      teamInvite: (email: string) => Promise<{ team: Team; error?: string }>
+      teamResendInvite: (inviteId: string) => Promise<Team>
+      teamRevokeInvite: (inviteId: string) => Promise<Team>
+      teamRemoveMember: (memberId: string) => Promise<Team>
       getPermissions: () => Promise<PermissionsState>
       requestPermission: (id: PermissionId) => Promise<PermissionsState>
       openPermissionSettings: (id: PermissionId) => Promise<void>

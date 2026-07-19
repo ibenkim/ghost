@@ -78,6 +78,14 @@ Completed and shipped items.
 - [x] 4.1 first-run empty Library (ready-state sub-line, centered record CTA parks window, static hint); Activity/History empty mirror
 - [x] Verified: `tsc -b`, `electron-vite build`, Electron boots
 
+## 2026-07-19 — Phase 5 Owner Workspace (v3)
+
+- [x] Team model: `Member` / `Invite` + session `role`; mocked roster, invite/resend/revoke/remove/rename IPC
+- [x] Owner home header: `N workflows · Team of M · ≈ H h returned this month` (employee metric unchanged)
+- [x] Sidebar Manage nav (owners only); `ManageView` — members, Invite to Team, Edit rename, INVITED, remove confirm
+- [x] Activity / workflows / detail baseline unchanged from employee workspace
+- [x] Verified: `tsc`
+
 ---
 
 > Items land here once work is complete and confirmed working.

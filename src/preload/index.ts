@@ -166,6 +166,15 @@ const ghostBridge = {
   teamCreate: (): Promise<Team> => ipcRenderer.invoke('team:create'),
   teamJoin: (code: string): Promise<JoinResult> => ipcRenderer.invoke('team:join', code),
   teamPreview: (code: string): Promise<InvitePreview> => ipcRenderer.invoke('team:preview', code),
+  teamRename: (name: string): Promise<Team> => ipcRenderer.invoke('team:rename', name),
+  teamInvite: (email: string): Promise<{ team: Team; error?: string }> =>
+    ipcRenderer.invoke('team:invite', email),
+  teamResendInvite: (inviteId: string): Promise<Team> =>
+    ipcRenderer.invoke('team:resendInvite', inviteId),
+  teamRevokeInvite: (inviteId: string): Promise<Team> =>
+    ipcRenderer.invoke('team:revokeInvite', inviteId),
+  teamRemoveMember: (memberId: string): Promise<Team> =>
+    ipcRenderer.invoke('team:removeMember', memberId),
 
   // ── Permissions service (main process) ──
   getPermissions: (): Promise<PermissionsState> => ipcRenderer.invoke('permissions:get'),
