@@ -51,24 +51,27 @@ export function openPermissionSettings(id: PermissionId): void {
 
 /**
  * Fire the real macOS prompt for the given permission. Screen recording has no
- * direct request API — touching `desktopCapturer` triggers the system dialog on
- * first use, and if it's still off we drop the user into the exact pane.
+ * direct request API — touching `desktopCapturer` triggers the system dialog.
+ *
+ * Does NOT auto-open System Settings: the OS sheet already offers that path, and
+ * stacking Settings on top of it is awkward. Denied → recovery card; the user
+ * opens Settings explicitly via "Open System Settings".
  */
 export async function requestPermission(id: PermissionId): Promise<PermissionsState> {
+  // Keep the onboarding card up. The OS sheet floats above it; System Settings
+  // is only opened from the recovery card's explicit button (openPermissionSettings).
   if (!isMac) return getPermissions()
   try {
     if (id === 'microphone') {
       await systemPreferences.askForMediaAccess('microphone')
     } else if (id === 'accessibility') {
       accessibilityStatus(true)
-      if (accessibilityStatus(false) !== 'granted') openPermissionSettings('accessibility')
     } else {
       try {
         await desktopCapturer.getSources({ types: ['screen'] })
       } catch {
         // Ignored — the call itself is what surfaces the permission prompt.
       }
-      if (mediaStatus('screen') !== 'granted') openPermissionSettings('screen')
     }
   } catch (err) {
     console.error('[permissions] request failed', err)

@@ -47,6 +47,8 @@ let isQuitting = false
 let shortcutsRegistered = false
 /** Last AppState reported by the pill (for context-menu recording variant). */
 let pillAppState: string = 'idle'
+/** True while the onboarding overlay is hidden so System Settings can be used. */
+let overlayDemotedForSettings = false
 
 const PILL_W = 94
 const PILL_H = 24
@@ -804,8 +806,11 @@ ipcMain.handle('pill:contextMenu', (event) => {
 // is only possible from the tray. Relaunch returns to the persisted step.
 function createOnboardingWindow() {
   if (onboardingWindow) {
-    onboardingWindow.show()
-    onboardingWindow.focus()
+    if (overlayDemotedForSettings) promoteOnboardingOverlay()
+    else {
+      onboardingWindow.show()
+      onboardingWindow.focus()
+    }
     return
   }
   const { x, y, width, height } = screen.getPrimaryDisplay().bounds
@@ -833,9 +838,9 @@ function createOnboardingWindow() {
   onboardingWindow.setAlwaysOnTop(true, 'floating')
   onboardingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-  // User returned from System Settings (or Cmd-Tabbed back) — restore the gate.
+  // Restore the gate after returning from System Settings.
   onboardingWindow.on('focus', () => {
-    promoteOnboardingOverlay()
+    if (overlayDemotedForSettings) promoteOnboardingOverlay()
   })
 
   onboardingWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -974,18 +979,27 @@ function enterOnboardingMode(): void {
   createOnboardingWindow()
 }
 
-/** Let the user reach System Settings: drop always-on-top while Settings is open. */
+/**
+ * Hide the fullscreen onboarding overlay so System Settings (and the macOS
+ * permission sheet) can receive clicks. Clearing alwaysOnTop alone is not
+ * enough — the overlay still covers the display.
+ */
 function demoteOnboardingForSettings(): void {
   if (!onboardingWindow || onboardingWindow.isDestroyed()) return
+  overlayDemotedForSettings = true
   onboardingWindow.setAlwaysOnTop(false)
   onboardingWindow.setVisibleOnAllWorkspaces(false)
+  onboardingWindow.hide()
 }
 
 function promoteOnboardingOverlay(): void {
   if (!onboardingWindow || onboardingWindow.isDestroyed()) return
   if (getSnapshot().onboardingComplete) return
+  overlayDemotedForSettings = false
   onboardingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   onboardingWindow.setAlwaysOnTop(true, 'floating')
+  onboardingWindow.show()
+  onboardingWindow.focus()
 }
 
 /** Record a granted→denied flip so the pill can arm the paused-permission UX. */
