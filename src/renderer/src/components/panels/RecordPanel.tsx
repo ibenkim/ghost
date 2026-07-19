@@ -13,7 +13,10 @@ export default function RecordPanel() {
     setSelectedAppId,
     narrate,
     setNarrate,
-    startRecording
+    startRecording,
+    screenGranted,
+    micGranted,
+    openScreenRecovery
   } = useWorkflow()
 
   const modes: { value: RecordMode; label: string }[] = [
@@ -69,15 +72,34 @@ export default function RecordPanel() {
         <div className="narrate-row">
           <div className="narrate-label">
             <MicIcon size={11} />
-            <span>Narrate while recording</span>
+            <span>{micGranted ? 'Narrate while recording' : 'mic is off — turn on in Settings'}</span>
           </div>
-          <Toggle checked={narrate} onChange={setNarrate} />
+          {micGranted ? (
+            <Toggle checked={narrate} onChange={setNarrate} />
+          ) : (
+            <button
+              className="btn-text btn-text-sm"
+              onClick={() => window.ghostBridge?.openPermissionSettings?.('microphone')}
+            >
+              Settings
+            </button>
+          )}
         </div>
 
-      <button className="start-recording-btn" onClick={startRecording}>
+      <button
+        className="start-recording-btn"
+        disabled={!screenGranted}
+        onClick={() => (screenGranted ? startRecording() : openScreenRecovery())}
+      >
         Start Recording
       </button>
-      <div className="record-hint">Press ⌥G to record</div>
+      {screenGranted ? (
+        <div className="record-hint">Press ⌥G to record</div>
+      ) : (
+        <button className="record-hint record-hint-warn" onClick={openScreenRecovery}>
+          Screen Recording is off — turn it on to record
+        </button>
+      )}
     </div>
   )
 }

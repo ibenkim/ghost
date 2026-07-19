@@ -5,13 +5,22 @@ import { mergeComingUp } from '../shared/activity'
 import { createSeedSnapshot } from '../shared/seed'
 import type {
   ActivityEntry,
+  OnboardingStep,
   PillPosition,
   RecordSettings,
   Run,
+  Session,
   StoreSnapshot,
   Suggestion,
+  Team,
   Workflow
 } from '../shared/types'
+
+const ONBOARDING_STEPS: OnboardingStep[] = ['welcome', 'team', 'permissions', 'complete']
+
+function normalizeStep(raw: unknown): OnboardingStep {
+  return ONBOARDING_STEPS.includes(raw as OnboardingStep) ? (raw as OnboardingStep) : 'welcome'
+}
 
 const STORE_VERSION = 1 as const
 
@@ -38,7 +47,12 @@ function normalizeSnapshot(raw: unknown): StoreSnapshot {
     recordSettings: data.recordSettings ?? seed.recordSettings,
     pillPosition: data.pillPosition ?? null,
     onboardingComplete: Boolean(data.onboardingComplete),
-    session: data.session ?? null
+    onboardingStep: normalizeStep(data.onboardingStep),
+    session: data.session ?? null,
+    team: data.team ?? null,
+    micSkipped: Boolean(data.micSkipped),
+    permissionToastDismissedAt: data.permissionToastDismissedAt ?? null,
+    lastPermissionRevokeAt: data.lastPermissionRevokeAt ?? null
   }
 }
 
@@ -199,6 +213,43 @@ export function setPillPosition(position: PillPosition | null): StoreSnapshot {
 export function setOnboardingComplete(complete: boolean): StoreSnapshot {
   return commit((draft) => {
     draft.onboardingComplete = complete
+    if (complete) draft.onboardingStep = 'complete'
+  })
+}
+
+export function setOnboardingStep(step: OnboardingStep): StoreSnapshot {
+  return commit((draft) => {
+    draft.onboardingStep = step
+  })
+}
+
+export function setSession(session: Session): StoreSnapshot {
+  return commit((draft) => {
+    draft.session = session
+  })
+}
+
+export function setTeam(team: Team): StoreSnapshot {
+  return commit((draft) => {
+    draft.team = team
+  })
+}
+
+export function setMicSkipped(skipped: boolean): StoreSnapshot {
+  return commit((draft) => {
+    draft.micSkipped = skipped
+  })
+}
+
+export function setPermissionToastDismissedAt(iso: string | null): StoreSnapshot {
+  return commit((draft) => {
+    draft.permissionToastDismissedAt = iso
+  })
+}
+
+export function setLastPermissionRevokeAt(iso: string | null): StoreSnapshot {
+  return commit((draft) => {
+    draft.lastPermissionRevokeAt = iso
   })
 }
 
@@ -276,6 +327,13 @@ export function registerStoreIpc(): void {
   )
   ipcMain.handle('store:setOnboardingComplete', (_e, complete: boolean) =>
     setOnboardingComplete(complete)
+  )
+  ipcMain.handle('store:setOnboardingStep', (_e, step: OnboardingStep) => setOnboardingStep(step))
+  ipcMain.handle('store:setSession', (_e, session: Session) => setSession(session))
+  ipcMain.handle('store:setTeam', (_e, team: Team) => setTeam(team))
+  ipcMain.handle('store:setMicSkipped', (_e, skipped: boolean) => setMicSkipped(skipped))
+  ipcMain.handle('store:setPermissionToastDismissedAt', (_e, iso: string | null) =>
+    setPermissionToastDismissedAt(iso)
   )
   ipcMain.handle('store:skipActivity', (_e, entryId: string) => skipActivity(entryId))
   ipcMain.handle('store:upsertActivityHold', (_e, payload: ActivityHoldPayload) =>

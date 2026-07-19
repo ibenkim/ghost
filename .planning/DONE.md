@@ -63,6 +63,21 @@ Completed and shipped items.
 - [x] Summary “View log” + Activity Done → run detail deep-link
 - [x] Verified: `tsc`, `electron-vite build`
 
+## 2026-07-19 — Phase 4 Onboarding + permissions (v3)
+
+- [x] Hard gate: fullscreen `#onboarding` overlay (desktop inert, no dismiss); tray Quit-only during setup; pill/workspace blocked until complete
+- [x] Persisted `onboardingStep` (welcome/team/permissions/complete) — relaunch resumes the same card; empty first-run Library seed
+- [x] Store models: `team`, `session` setter, `micSkipped`, revoke-toast timestamps + IPC/preload/bridge
+- [x] 1.1 welcome: Continue with Google (browser round-trip stub) · email magic link → “Check your inbox” · rose failure line · Terms in browser
+- [x] `ghost://` deep-link handler (magic + invite) via `setAsDefaultProtocolClient` + single-instance/`open-url`; simulated magic-link return
+- [x] 1.2 team: Create (auto-named) / Join (invite link-or-code, invalid → rose) · invite-link pre-fill + confirm row · Back keeps session; mocked team service + `Team` model
+- [x] Permissions service (`systemPreferences` + `desktopCapturer`): check/request/2s background poll/Settings pane deep-link/`Restart yuh` + IPC
+- [x] 2.x checklist card on the step rail (counter, expand/why/Allow/hint, done check, mic Optional + Skip dash, Why popover) + 3.1 denied recovery (apricot block, Settings path, Check again, shake)
+- [x] 2.5 complete: Record your first workflow (narration iff mic) / Done → idle
+- [x] Shared `Toast` (Phase 1); 3.2 idle revoke → apricot pill + toast w/ next-run stake; mid-run revoke → amber hold, re-grant resumes; record/run preflight + narrate mic-off gating
+- [x] 4.1 first-run empty Library (ready-state sub-line, centered record CTA parks window, static hint); Activity/History empty mirror
+- [x] Verified: `tsc -b`, `electron-vite build`, Electron boots
+
 ---
 
 > Items land here once work is complete and confirmed working.

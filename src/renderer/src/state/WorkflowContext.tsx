@@ -11,8 +11,10 @@ import {
   ReactNode
 } from 'react'
 import { newId } from '../../../shared/id'
+import { nextRun } from '../../../shared/schedule'
 import type {
   AppState,
+  PermissionsState,
   QuestionReceipt,
   RecordMode,
   Run,
@@ -101,6 +103,24 @@ type WorkflowContextValue = {
   summaryMeta: string
   /** Persisted run id for the current / last summary — View log deep-link. */
   lastRunId: string | null
+  // permissions (Phase 4)
+  /** True when Screen Recording is granted (record / run preflight). */
+  screenGranted: boolean
+  /** True when Microphone is granted (narration availability). */
+  micGranted: boolean
+  /** A required permission (screen / accessibility) is currently off. */
+  permissionPaused: boolean
+  /** A run is holding mid-flight because a required permission dropped. */
+  permissionHold: boolean
+  /** Show the revoked-permission toast above the pill. */
+  permToastVisible: boolean
+  /** Concrete stake shown in the revoked toast (next scheduled run). */
+  permStake: string
+  /** Which permission the revoked toast points at. */
+  permStakeTitle: string
+  fixPermission: () => void
+  dismissPermToast: () => void
+  openScreenRecovery: () => void
   // transitions
   openHover: () => void
   closeHover: () => void
@@ -218,6 +238,100 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
 
   const [summaryOutcome, setSummaryOutcome] = useState<SummaryOutcome>('done')
 
+  // ── Permissions (Phase 4) ──
+  const [permissions, setPermissions] = useState<PermissionsState | null>(null)
+  const permissionsRef = useRef<PermissionsState | null>(null)
+  const [toastArmed, setToastArmed] = useState(false)
+  const [permStake, setPermStake] = useState('')
+  const [permStakeTitle, setPermStakeTitle] = useState('Screen recording was turned off')
+  const [permissionHold, setPermissionHold] = useState(false)
+  const permissionHoldRef = useRef(false)
+  permissionHoldRef.current = permissionHold
+
+  const screenGranted = permissions ? permissions.screen === 'granted' : true
+  const accessibilityGranted = permissions ? permissions.accessibility === 'granted' : true
+  const micGranted = permissions ? permissions.microphone === 'granted' : false
+  const permissionPaused = !!permissions && (!screenGranted || !accessibilityGranted)
+
+  const missingPermissionId = (): 'screen' | 'accessibility' =>
+    permissions && permissions.screen !== 'granted' ? 'screen' : 'accessibility'
+
+  const computeStake = useCallback(async () => {
+    const missing = permissions && permissions.screen !== 'granted' ? 'screen' : 'accessibility'
+    setPermStakeTitle(
+      missing === 'screen' ? 'Screen recording was turned off' : 'Accessibility was turned off'
+    )
+    const snap = await window.ghostBridge?.getSnapshot?.()
+    const scheduled = (snap?.workflows ?? [])
+      .filter((w) => w.status === 'on' && w.trigger.cadence)
+      .map((w) => ({ w, when: nextRun(w.trigger) }))
+      .filter((x): x is { w: Workflow; when: Date } => x.when != null)
+      .sort((a, b) => a.when.getTime() - b.when.getTime())
+    if (scheduled.length === 0) {
+      setPermStake('yuh can’t record or run workflows until this is back on.')
+      return
+    }
+    const { w, when } = scheduled[0]
+    const time = when.toLocaleString(undefined, {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+    setPermStake(`${w.name} is scheduled for ${time}. yuh can’t run it until this is back on.`)
+  }, [permissions])
+
+  useEffect(() => {
+    let cancelled = false
+    window.ghostBridge?.getPermissions?.().then((p) => {
+      if (cancelled || !p) return
+      permissionsRef.current = p
+      setPermissions(p)
+    })
+    const off = window.ghostBridge?.onPermissionsChanged?.((p) => {
+      const prev = permissionsRef.current
+      permissionsRef.current = p
+      setPermissions(p)
+      const wasOk = !!prev && prev.screen === 'granted' && prev.accessibility === 'granted'
+      const nowMissing = p.screen !== 'granted' || p.accessibility !== 'granted'
+      if (wasOk && nowMissing) {
+        setToastArmed(true)
+        void computeStake()
+        if (stateRef.current === 'running') {
+          setPermissionHold(true)
+          setRunPaused(true)
+          setRunCollapsed(false)
+        }
+      }
+      if (!nowMissing) {
+        setToastArmed(false)
+        if (permissionHoldRef.current) {
+          setPermissionHold(false)
+          setRunPaused(false)
+        }
+      }
+    })
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [computeStake])
+
+  const permToastVisible = toastArmed && state !== 'running'
+
+  const fixPermission = useCallback(() => {
+    window.ghostBridge?.openPermissionSettings?.(missingPermissionId())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions])
+
+  const openScreenRecovery = useCallback(() => {
+    window.ghostBridge?.openPermissionSettings?.('screen')
+  }, [])
+
+  const dismissPermToast = useCallback(() => {
+    setToastArmed(false)
+    window.ghostBridge?.setPermissionToastDismissedAt?.(new Date().toISOString())
+  }, [])
+
   // ── Hydrate last-used record settings from the shared store ──
   useEffect(() => {
     let cancelled = false
@@ -299,9 +413,15 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     type Size = { w: number; h: number; mode: 'pill' | 'glass' | 'panel' }
     const glassPanelH = Math.max(hoverPanelH, HOVER_PANEL_H)
-    const idleW = savedConfirm ? 210 : 94
+    const idleSize: Size = savedConfirm
+      ? { w: 210, h: 24, mode: 'pill' }
+      : permToastVisible
+        ? { w: 340, h: 180, mode: 'panel' }
+        : permissionPaused
+          ? { w: 224, h: 24, mode: 'pill' }
+          : { w: 94, h: 24, mode: 'pill' }
     const sizes: Record<AppState, Size> = {
-      idle: { w: idleW, h: 24, mode: 'pill' },
+      idle: idleSize,
       hover: { w: 266, h: glassPanelH + 8 + 24, mode: 'glass' },
       recording: watchExpanded
         ? { w: 300, h: 330, mode: 'panel' }
@@ -341,7 +461,16 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     window.ghostBridge?.setBounds?.(w, h, mode, { durationMs, pillDrive })?.then((placement) => {
       if (placement) setPanelPlacement(placement)
     })
-  }, [state, watchExpanded, editorCollapsed, runCollapsed, savedConfirm, hoverPanelH])
+  }, [
+    state,
+    watchExpanded,
+    editorCollapsed,
+    runCollapsed,
+    savedConfirm,
+    hoverPanelH,
+    permToastVisible,
+    permissionPaused
+  ])
 
   // ── Recording timer ──
   useEffect(() => {
@@ -723,10 +852,17 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       setState('running')
       return
     }
+    // Preflight Screen Recording — missing routes to recovery instead of running.
+    if (permissionsRef.current && permissionsRef.current.screen !== 'granted') {
+      window.ghostBridge?.openPermissionSettings?.('screen')
+      setToastArmed(true)
+      void computeStake()
+      return
+    }
     // Run saves into history first, then runs.
     window.ghostBridge?.upsertWorkflow?.(workflow)
     beginRun(workflow)
-  }, [beginRun, workflow])
+  }, [beginRun, computeStake, workflow])
 
   const saveWorkflow = useCallback(() => {
     runInFlightRef.current = false
@@ -776,6 +912,12 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     })
     const offRun = window.ghostBridge?.onRunWorkflow?.(async (workflowId) => {
       runInFlightRef.current = false
+      if (permissionsRef.current && permissionsRef.current.screen !== 'granted') {
+        window.ghostBridge?.openPermissionSettings?.('screen')
+        setToastArmed(true)
+        void computeStake()
+        return
+      }
       const fromStore = await window.ghostBridge?.getWorkflow?.(workflowId)
       if (!fromStore) {
         console.warn(`[pill] runWorkflow: workflow ${workflowId} not in store`)
@@ -799,7 +941,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       offEditor?.()
       offReveal?.()
     }
-  }, [beginRun])
+  }, [beginRun, computeStake])
 
   const value: WorkflowContextValue = {
     state,
@@ -842,6 +984,16 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     summaryOutcome,
     summaryMeta,
     lastRunId,
+    screenGranted,
+    micGranted,
+    permissionPaused,
+    permissionHold,
+    permToastVisible,
+    permStake,
+    permStakeTitle,
+    fixPermission,
+    dismissPermToast,
+    openScreenRecovery,
     openHover,
     closeHover,
     startRecording,

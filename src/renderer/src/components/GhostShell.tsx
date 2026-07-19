@@ -6,6 +6,7 @@ import LearningPanel from './panels/LearningPanel'
 import EditorPanel from './panels/EditorPanel'
 import RunningPanel from './panels/RunningPanel'
 import SummaryPanel from './panels/SummaryPanel'
+import Toast from './shared/Toast'
 
 export default function GhostShell() {
   const {
@@ -17,7 +18,12 @@ export default function GhostShell() {
     panelPlacement,
     hoverFading,
     hoverDismissMode,
-    reportHoverPanelHeight
+    reportHoverPanelHeight,
+    permToastVisible,
+    permStake,
+    permStakeTitle,
+    fixPermission,
+    dismissPermToast
   } = useWorkflow()
 
   // The hover window hugs its content exactly (no padding) — measure the
@@ -63,8 +69,11 @@ export default function GhostShell() {
     (state === 'running' && !runCollapsed) ||
     state === 'summary'
 
+  // The revoked-permission toast floats above the pill while idle.
+  const showToast = permToastVisible && !expandedPanel && state !== 'hover'
+
   // Pill mode: the window is sized exactly to the pill (native blur/shadow).
-  const pillMode = !expandedPanel && state !== 'hover'
+  const pillMode = !expandedPanel && state !== 'hover' && !showToast
 
   const rootClass = [
     'ghost-root',
@@ -112,6 +121,18 @@ export default function GhostShell() {
         {state === 'summary' && (
           <div className="morph-panel morph-panel-in">
             <SummaryPanel />
+          </div>
+        )}
+        {showToast && (
+          <div className="toast-slot">
+            <Toast
+              tone="apricot"
+              title={permStakeTitle}
+              body={permStake}
+              actionLabel="Fix in System Settings"
+              onAction={fixPermission}
+              onDismiss={dismissPermToast}
+            />
           </div>
         )}
       </div>

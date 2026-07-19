@@ -238,11 +238,44 @@ export type PillPosition = {
   y: number
 }
 
-/** Mocked session shape — real auth lands in Phase 4. */
+/** Mocked session shape — real auth lands behind the Phase 4 stub. */
 export type Session = {
   email: string
   displayName: string
 } | null
+
+/** Which onboarding card the app resumes to on relaunch (hard gate). */
+export type OnboardingStep = 'welcome' | 'team' | 'permissions' | 'complete'
+
+export type TeamRole = 'owner' | 'member'
+
+/** Minimal team model created/joined during onboarding — Phase 5 extends it. */
+export type Team = {
+  id: string
+  name: string
+  memberCount: number
+  role: TeamRole
+} | null
+
+/** macOS privacy permissions yuh preflights before recording / running. */
+export type PermissionId = 'screen' | 'accessibility' | 'microphone'
+
+export type PermissionStatus = 'granted' | 'denied' | 'unknown'
+
+export type PermissionsState = {
+  screen: PermissionStatus
+  accessibility: PermissionStatus
+  microphone: PermissionStatus
+}
+
+/** Custom-scheme payloads routed from main into the onboarding window. */
+export type DeepLink =
+  | { kind: 'magic'; email: string; token: string }
+  | { kind: 'google' }
+  | { kind: 'invite'; code: string }
+
+export type JoinResult = { ok: boolean; team?: Team; error?: string }
+export type InvitePreview = { ok: boolean; team?: Team }
 
 export type StoreSnapshot = {
   version: 1
@@ -254,5 +287,14 @@ export type StoreSnapshot = {
   recordSettings: RecordSettings
   pillPosition: PillPosition | null
   onboardingComplete: boolean
+  /** Persisted step progress so relaunch mid-setup returns to the same card. */
+  onboardingStep: OnboardingStep
   session: Session
+  team: Team
+  /** True once the user chose "Skip for now" on the mic permission. */
+  micSkipped: boolean
+  /** Last time the revoked-permission toast was dismissed (shown once/revoke). */
+  permissionToastDismissedAt: string | null
+  /** Last time a previously-granted permission was observed to flip off. */
+  lastPermissionRevokeAt: string | null
 }

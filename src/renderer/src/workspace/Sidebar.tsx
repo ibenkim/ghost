@@ -65,7 +65,15 @@ export default function Sidebar({
             <div className="team-menu-divider" />
             <button className="team-menu-item team-menu-item-dim">Join a team</button>
             <button className="team-menu-item team-menu-item-dim">Settings</button>
-            <button className="team-menu-item team-menu-item-dim">Log out</button>
+            <button
+              className="team-menu-item"
+              onClick={() => {
+                setMenuOpen(false)
+                void window.ghostBridge?.logout?.()
+              }}
+            >
+              Log out
+            </button>
           </div>
         )}
       </div>

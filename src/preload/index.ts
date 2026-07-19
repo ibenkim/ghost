@@ -1,11 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  DeepLink,
+  InvitePreview,
+  JoinResult,
+  OnboardingStep,
+  PermissionId,
+  PermissionsState,
   PillPosition,
   RecordSettings,
   Run,
+  Session,
   StoreSnapshot,
   Suggestion,
+  Team,
   Workflow,
   WorkspaceFocus
 } from '../shared/types'
@@ -118,12 +126,58 @@ const ghostBridge = {
     ipcRenderer.invoke('store:setPillPosition', position),
   setOnboardingComplete: (complete: boolean): Promise<StoreSnapshot> =>
     ipcRenderer.invoke('store:setOnboardingComplete', complete),
+  setOnboardingStep: (step: OnboardingStep): Promise<StoreSnapshot> =>
+    ipcRenderer.invoke('store:setOnboardingStep', step),
+  setSession: (session: Session): Promise<StoreSnapshot> =>
+    ipcRenderer.invoke('store:setSession', session),
+  setTeam: (team: Team): Promise<StoreSnapshot> => ipcRenderer.invoke('store:setTeam', team),
+  setMicSkipped: (skipped: boolean): Promise<StoreSnapshot> =>
+    ipcRenderer.invoke('store:setMicSkipped', skipped),
+  setPermissionToastDismissedAt: (iso: string | null): Promise<StoreSnapshot> =>
+    ipcRenderer.invoke('store:setPermissionToastDismissedAt', iso),
   skipActivity: (entryId: string): Promise<StoreSnapshot> =>
     ipcRenderer.invoke('store:skipActivity', entryId),
   onStoreChanged: (cb: (snapshot: StoreSnapshot) => void) => {
     const listener = (_e: unknown, snapshot: StoreSnapshot) => cb(snapshot)
     ipcRenderer.on('store:changed', listener)
     return () => ipcRenderer.removeListener('store:changed', listener)
+  },
+
+  // ── Onboarding gate + deep links ──
+  /** Finish onboarding: promote to the pill/workspace (optionally open record). */
+  completeOnboarding: (opts?: { openRecordPanel?: boolean }): Promise<void> =>
+    ipcRenderer.invoke('onboarding:complete', opts ?? {}),
+  /** Open a URL in the system browser (Terms, Privacy, OAuth). */
+  openExternalUrl: (url: string): Promise<void> => ipcRenderer.invoke('app:openExternal', url),
+  onDeepLink: (cb: (link: DeepLink) => void) => {
+    const listener = (_e: unknown, link: DeepLink) => cb(link)
+    ipcRenderer.on('onboarding:deepLink', listener)
+    return () => ipcRenderer.removeListener('onboarding:deepLink', listener)
+  },
+
+  // ── Mocked auth service (stub behind an interface) ──
+  authGoogle: (): Promise<Session> => ipcRenderer.invoke('auth:google'),
+  authSendMagicLink: (email: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('auth:sendMagicLink', email),
+  /** Clear session and reopen the onboarding gate at welcome. */
+  logout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
+
+  // ── Mocked team service ──
+  teamCreate: (): Promise<Team> => ipcRenderer.invoke('team:create'),
+  teamJoin: (code: string): Promise<JoinResult> => ipcRenderer.invoke('team:join', code),
+  teamPreview: (code: string): Promise<InvitePreview> => ipcRenderer.invoke('team:preview', code),
+
+  // ── Permissions service (main process) ──
+  getPermissions: (): Promise<PermissionsState> => ipcRenderer.invoke('permissions:get'),
+  requestPermission: (id: PermissionId): Promise<PermissionsState> =>
+    ipcRenderer.invoke('permissions:request', id),
+  openPermissionSettings: (id: PermissionId): Promise<void> =>
+    ipcRenderer.invoke('permissions:openSettings', id),
+  restartApp: (): Promise<void> => ipcRenderer.invoke('permissions:restart'),
+  onPermissionsChanged: (cb: (state: PermissionsState) => void) => {
+    const listener = (_e: unknown, state: PermissionsState) => cb(state)
+    ipcRenderer.on('permissions:changed', listener)
+    return () => ipcRenderer.removeListener('permissions:changed', listener)
   }
 }
 

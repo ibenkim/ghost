@@ -45,17 +45,19 @@ export default function StatusPill({
             ? 'pill-apricot'
             : ''
 
+  // Default / teal / apricot read as translucent glass with white text;
+  // amber / rose are the white bordered active pill.
+  const isGlass = tone === 'default' || tone === 'teal' || tone === 'apricot'
+
   return (
     <div
-      className={`pill ${tone === 'teal' || tone === 'default' ? 'pill-glass glass-stroke glass-stroke-pill' : 'pill-active'} ${toneClass} ${className}`}
+      className={`pill ${isGlass ? 'pill-glass glass-stroke glass-stroke-pill' : 'pill-active'} ${toneClass} ${className}`}
       onClick={onClick}
       onMouseDown={onMouseDown}
       onContextMenu={onContextMenu}
     >
       {showDot && <span className={`status-dot status-dot-${tone}`} />}
-      <span className={`pill-text ${tone === 'default' || tone === 'teal' ? 'pill-text-light' : ''}`}>
-        {label}
-      </span>
+      <span className={`pill-text ${isGlass ? 'pill-text-light' : ''}`}>{label}</span>
       {actionLabel && (
         <button
           className="pill-action"

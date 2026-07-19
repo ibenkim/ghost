@@ -453,6 +453,49 @@
   padding: 8px 11px;
 }
 
+/* ── 4.1 first-run empty Library ── */
+.ws-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-bottom: 40px;
+}
+.ws-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ws-empty-desc {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--icon-color);
+  text-align: center;
+}
+.ws-empty-cta {
+  margin-top: 6px;
+  background: var(--text);
+  color: var(--white-text);
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 9px 16px;
+}
+.ws-empty-cta:hover {
+  filter: brightness(1.2);
+}
+.ws-empty-hint {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-40);
+  text-align: center;
+}
+
 /* ── Run detail ── */
 .run-detail { gap: 0; }
 .run-detail-back {

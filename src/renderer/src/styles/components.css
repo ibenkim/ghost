@@ -784,3 +784,95 @@
   padding: 2px 11px 6px 36px;
   animation: pillIn 0.15s ease-out;
 }
+
+/* ── Record-panel permission gating (Phase 4) ── */
+.start-recording-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.start-recording-btn:disabled:hover {
+  background: transparent;
+}
+.record-hint-warn {
+  background: none;
+  border: none;
+  color: var(--apricot-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Toast (Phase 4) — white card that slides in above the pill ── */
+.toast-slot {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  animation: toastIn 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.ghost-root-below .toast-slot {
+  align-items: flex-start;
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toast {
+  width: 320px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 4px 30px rgba(62, 43, 73, 0.2);
+}
+.toast-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toast-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.toast-body {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--icon-color);
+}
+.toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+.toast-btn {
+  background: var(--text);
+  color: var(--white-text);
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+}
+.toast-btn:hover {
+  filter: brightness(1.2);
+}
+.toast-dismiss {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--icon-color);
+  padding: 0;
+}
+.toast-dismiss:hover {
+  color: var(--text-70);
+}

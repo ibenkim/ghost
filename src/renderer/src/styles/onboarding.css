@@ -1,0 +1,437 @@
+/* ── Onboarding overlay (Phase 4) ──
+ * Fullscreen transparent window over the real (inert) desktop; a single
+ * centered card is the only interactive surface. */
+
+:root {
+  --onb-bar: rgba(62, 43, 73, 0.06);
+}
+
+.onb-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.onb-card {
+  width: 420px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 4px 30px rgba(62, 43, 73, 0.2);
+  padding: 28px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: onbCardIn 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.onb-perms-card {
+  width: 440px;
+  padding: 24px 28px 20px;
+  gap: 5px;
+}
+@keyframes onbCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.onb-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-40);
+  letter-spacing: 0.02em;
+}
+.onb-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.onb-sub {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--icon-color);
+}
+.onb-gap {
+  height: 8px;
+}
+.onb-gap-sm {
+  height: 6px;
+}
+
+/* ── Buttons (Figma onboarding component shelf) ── */
+.onb-btn-primary {
+  background: var(--text);
+  color: var(--white-text);
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 9px 16px;
+  white-space: nowrap;
+}
+.onb-btn-primary:hover {
+  filter: brightness(1.2);
+}
+.onb-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.onb-btn-secondary {
+  background: #fff;
+  border: 1px solid var(--text-40);
+  border-radius: 10px;
+  color: var(--text-70);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+}
+.onb-btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.onb-link {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--icon-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.onb-link:hover {
+  color: var(--text-70);
+}
+
+/* ── Welcome ── */
+.onb-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--text-40);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-70);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 0;
+}
+.onb-google-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+.onb-google-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.onb-alt {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+.onb-terms {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+.onb-terms-link {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--text-40);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.onb-terms-link:hover {
+  color: var(--text-70);
+}
+.onb-error {
+  font-size: 11px;
+  color: var(--rose);
+  padding-top: 2px;
+}
+.onb-inbox {
+  background: var(--onb-bar);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.onb-inbox-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.onb-inbox-sub {
+  font-size: 11px;
+  color: var(--icon-color);
+  margin-top: 3px;
+  line-height: 16px;
+}
+
+/* ── Inputs ── */
+.onb-input {
+  width: 100%;
+  border: 1px solid var(--text-40);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+}
+.onb-input::placeholder {
+  color: var(--text-40);
+}
+.onb-input:focus {
+  border-color: var(--text-70);
+}
+.onb-input-error,
+.onb-input-error:focus {
+  border-color: var(--rose);
+}
+
+/* ── Team ── */
+.onb-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 14px;
+  text-align: left;
+}
+.onb-option-on {
+  background: var(--onb-bar);
+}
+.onb-option-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.onb-option-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.onb-option-sub {
+  font-size: 11px;
+  color: var(--icon-color);
+}
+.onb-radio {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-40);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.onb-radio-on {
+  border-color: var(--purple);
+  background: var(--purple);
+  box-shadow: inset 0 0 0 2.5px #fff;
+}
+.onb-join-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.onb-confirm-row {
+  background: var(--onb-bar);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.onb-footer {
+  display: flex;
+  align-items: center;
+}
+.onb-footer-spacer {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+.onb-footer-account {
+  font-size: 10px;
+  color: var(--text-40);
+}
+
+/* ── Permissions checklist ── */
+.onb-perms-head {
+  display: flex;
+  align-items: center;
+}
+.onb-counter {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--icon-color);
+}
+
+.onb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 7px 11px;
+  border-radius: 8px;
+}
+.onb-row-num {
+  font-size: 11px;
+  color: var(--icon-color);
+}
+.onb-row-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-40);
+}
+.onb-dash {
+  width: 10px;
+  height: 1.5px;
+  background: var(--text-40);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.onb-block {
+  background: var(--onb-bar);
+  border-radius: 10px;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onb-block-denied {
+  background: #fff;
+  border: 1px solid var(--apricot);
+  gap: 7px;
+}
+.onb-block-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.onb-block-num {
+  font-size: 11px;
+  color: var(--icon-color);
+}
+.onb-block-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.onb-block-tag {
+  font-size: 10px;
+  color: var(--apricot-text);
+}
+.onb-block-optional {
+  font-size: 10px;
+  color: var(--icon-color);
+  margin-left: auto;
+}
+.onb-block-why {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--icon-color);
+}
+.onb-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.onb-block-hint {
+  font-size: 10px;
+  color: var(--text-40);
+}
+.onb-skip {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--icon-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.onb-skip:hover {
+  color: var(--text-70);
+}
+.onb-path-line {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--icon-color);
+  padding-left: 21px;
+}
+.onb-path-dot {
+  color: var(--text-40);
+}
+.onb-still-off {
+  font-size: 11px;
+  color: var(--apricot-text);
+  padding-left: 21px;
+}
+.onb-shake {
+  animation: onbShake 0.42s ease;
+}
+@keyframes onbShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.onb-why-wrap {
+  position: relative;
+  display: flex;
+}
+.onb-why-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 30px rgba(62, 43, 73, 0.2);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+.onb-why-line {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-70);
+}
+.onb-why-foot {
+  font-size: 10px;
+  color: var(--text-40);
+  padding-top: 2px;
+}

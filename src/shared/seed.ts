@@ -322,32 +322,29 @@ export const DEFAULT_RECORD_SETTINGS: RecordSettings = {
   selectedAppId: 'chrome'
 }
 
-/** First-run seed only — subsequent launches load persisted JSON. */
+/**
+ * First-run seed only — subsequent launches load persisted JSON.
+ *
+ * v3 gates the app behind onboarding, and 4.1 first-run lands on an EMPTY
+ * Library (zero workflows / runs / suggestion). The rich SEED_* fixtures are
+ * retained for tests / demos but no longer populate a fresh install.
+ */
 export function createSeedSnapshot(): StoreSnapshot {
-  const workflows = SEED_WORKFLOWS.map((w) => ({
-    ...w,
-    steps: w.steps.map((s) => ({ ...s })),
-    trigger: { ...w.trigger, cadence: w.trigger.cadence ? { ...w.trigger.cadence } : undefined }
-  }))
-  const activity = mergeComingUp(
-    SEED_ACTIVITY.map((a) => ({ ...a })),
-    workflows
-  )
   return {
     version: 1,
-    workflows,
-    runs: SEED_RUNS.map((r) => ({
-      ...r,
-      steps: r.steps.map((s) => ({ ...s })),
-      questions: r.questions.map((q) => ({ ...q })),
-      artifactLinks: r.artifactLinks?.map((a) => ({ ...a }))
-    })),
-    activity,
-    suggestion: { ...SEED_SUGGESTION },
+    workflows: [],
+    runs: [],
+    activity: mergeComingUp([], []),
+    suggestion: null,
     discardedSuggestionIds: [],
     recordSettings: { ...DEFAULT_RECORD_SETTINGS },
     pillPosition: null,
     onboardingComplete: false,
-    session: null
+    onboardingStep: 'welcome',
+    session: null,
+    team: null,
+    micSkipped: false,
+    permissionToastDismissedAt: null,
+    lastPermissionRevokeAt: null
   }
 }

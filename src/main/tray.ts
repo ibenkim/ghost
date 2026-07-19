@@ -33,42 +33,55 @@ export type TrayHandlers = {
   openLibrary: () => void
 }
 
+/** 'onboarding' → Quit only (the sole exit during setup); 'normal' → full menu. */
+export type TrayMode = 'onboarding' | 'normal'
+
+let trayHandlers: TrayHandlers | null = null
+let trayMode: TrayMode = 'normal'
+
+function rebuildMenu(): void {
+  if (!tray) return
+  const template: Electron.MenuItemConstructorOptions[] =
+    trayMode === 'onboarding'
+      ? [{ label: 'Quit Ghost', click: () => app.quit() }]
+      : [
+          { label: 'Show pill', click: () => trayHandlers?.showPill() },
+          { label: 'Open Library', click: () => trayHandlers?.openLibrary() },
+          { type: 'separator' },
+          { label: 'Quit Ghost', click: () => app.quit() }
+        ]
+  tray.setContextMenu(Menu.buildFromTemplate(template))
+}
+
 /**
- * Menu-bar icon — recovers a hidden pill and is the quit path once
- * onboarding gates Esc/dismiss (Phase 4).
+ * Menu-bar icon — the only quit path while onboarding gates Esc/dismiss, and
+ * afterwards recovers a hidden pill / opens the Library.
  */
-export function createTray(handlers: TrayHandlers): Tray {
-  if (tray) return tray
+export function createTray(handlers: TrayHandlers, mode: TrayMode = 'normal'): Tray {
+  trayHandlers = handlers
+  trayMode = mode
+  if (tray) {
+    rebuildMenu()
+    return tray
+  }
 
   tray = new Tray(resolveTrayIcon())
   tray.setToolTip('Ghost')
   tray.setIgnoreDoubleClickEvents(true)
-
-  const rebuildMenu = () => {
-    tray?.setContextMenu(
-      Menu.buildFromTemplate([
-        {
-          label: 'Show pill',
-          click: () => handlers.showPill()
-        },
-        {
-          label: 'Open Library',
-          click: () => handlers.openLibrary()
-        },
-        { type: 'separator' },
-        {
-          label: 'Quit Ghost',
-          click: () => app.quit()
-        }
-      ])
-    )
-  }
   rebuildMenu()
 
-  // Left-click shows the pill (macOS also opens the context menu on right-click).
-  tray.on('click', () => handlers.showPill())
+  // Left-click shows the pill only once setup is complete.
+  tray.on('click', () => {
+    if (trayMode === 'normal') trayHandlers?.showPill()
+  })
 
   return tray
+}
+
+/** Swap the tray menu when onboarding completes (or would re-gate). */
+export function setTrayMode(mode: TrayMode): void {
+  trayMode = mode
+  rebuildMenu()
 }
 
 export function destroyTray(): void {

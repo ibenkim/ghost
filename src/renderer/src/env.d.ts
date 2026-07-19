@@ -1,11 +1,19 @@
 /// <reference types="vite/client" />
 
 import type {
+  DeepLink,
+  InvitePreview,
+  JoinResult,
+  OnboardingStep,
+  PermissionId,
+  PermissionsState,
   PillPosition,
   RecordSettings,
   Run,
+  Session,
   StoreSnapshot,
   Suggestion,
+  Team,
   Workflow,
   WorkspaceFocus
 } from '../../shared/types'
@@ -64,8 +72,27 @@ declare global {
       setRecordSettings: (settings: RecordSettings) => Promise<StoreSnapshot>
       setPillPosition: (position: PillPosition | null) => Promise<StoreSnapshot>
       setOnboardingComplete: (complete: boolean) => Promise<StoreSnapshot>
+      setOnboardingStep: (step: OnboardingStep) => Promise<StoreSnapshot>
+      setSession: (session: Session) => Promise<StoreSnapshot>
+      setTeam: (team: Team) => Promise<StoreSnapshot>
+      setMicSkipped: (skipped: boolean) => Promise<StoreSnapshot>
+      setPermissionToastDismissedAt: (iso: string | null) => Promise<StoreSnapshot>
       skipActivity: (entryId: string) => Promise<StoreSnapshot>
       onStoreChanged: (cb: (snapshot: StoreSnapshot) => void) => () => void
+      completeOnboarding: (opts?: { openRecordPanel?: boolean }) => Promise<void>
+      openExternalUrl: (url: string) => Promise<void>
+      onDeepLink: (cb: (link: DeepLink) => void) => () => void
+      authGoogle: () => Promise<Session>
+      authSendMagicLink: (email: string) => Promise<{ ok: boolean }>
+      logout: () => Promise<void>
+      teamCreate: () => Promise<Team>
+      teamJoin: (code: string) => Promise<JoinResult>
+      teamPreview: (code: string) => Promise<InvitePreview>
+      getPermissions: () => Promise<PermissionsState>
+      requestPermission: (id: PermissionId) => Promise<PermissionsState>
+      openPermissionSettings: (id: PermissionId) => Promise<void>
+      restartApp: () => Promise<void>
+      onPermissionsChanged: (cb: (state: PermissionsState) => void) => () => void
     }
   }
 }

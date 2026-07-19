@@ -29,7 +29,9 @@ export default function GhostPill() {
     runElapsedLabel,
     setRunCollapsed,
     hasQuestionHold,
-    hasErrorHold
+    hasErrorHold,
+    permissionPaused,
+    permissionHold
   } = useWorkflow()
   const dragging = useRef(false)
 
@@ -131,12 +133,18 @@ export default function GhostPill() {
 
   // ── Running collapsed: [pause] · "name · 3/6" · 1:05 · chevron ──
   if (state === 'running') {
-    const tone = hasErrorHold ? 'rose' : hasQuestionHold ? 'amber' : 'default'
+    const tone = permissionHold
+      ? 'apricot'
+      : hasErrorHold
+        ? 'rose'
+        : hasQuestionHold
+          ? 'amber'
+          : 'default'
     return (
       <div
         className={`pill pill-active ${tone === 'amber' ? 'pill-amber' : ''} ${
           tone === 'rose' ? 'pill-rose' : ''
-        }`}
+        } ${tone === 'apricot' ? 'pill-apricot' : ''}`}
         {...sharedProps}
       >
         <PauseButton paused={runPaused} onToggle={toggleRunPause} />
@@ -151,6 +159,18 @@ export default function GhostPill() {
           <ChevronUp />
         </button>
       </div>
+    )
+  }
+
+  // ── Idle / hover: apricot permission pause takes priority ──
+  if (permissionPaused && (state === 'idle' || state === 'hover')) {
+    return (
+      <StatusPill
+        tone="apricot"
+        showDot
+        label="Paused — needs permission"
+        {...sharedProps}
+      />
     )
   }
 

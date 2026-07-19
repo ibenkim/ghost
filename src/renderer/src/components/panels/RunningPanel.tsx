@@ -25,17 +25,25 @@ export default function RunningPanel() {
     stopRunning,
     editFromRunning,
     hasQuestionHold,
-    hasErrorHold
+    hasErrorHold,
+    permissionHold,
+    fixPermission
   } = useWorkflow()
 
-  const holdSuffix = hasErrorHold
-    ? ' · needs help'
-    : hasQuestionHold
-      ? ' · needs an answer'
-      : ''
+  const holdSuffix = permissionHold
+    ? ' · needs permission'
+    : hasErrorHold
+      ? ' · needs help'
+      : hasQuestionHold
+        ? ' · needs an answer'
+        : ''
 
   return (
-    <div className={`running-panel ${hasErrorHold ? 'running-panel-rose' : ''} ${hasQuestionHold ? 'running-panel-amber' : ''}`}>
+    <div
+      className={`running-panel ${hasErrorHold ? 'running-panel-rose' : ''} ${
+        hasQuestionHold || permissionHold ? 'running-panel-amber' : ''
+      }`}
+    >
       <div className="ledger-header">
         <PauseButton paused={runPaused} onToggle={toggleRunPause} />
         <span className="ledger-title">
@@ -52,6 +60,23 @@ export default function RunningPanel() {
       </div>
 
       <div className="run-steps scroll">
+        {permissionHold && (
+          <div className="run-card run-card-question">
+            <div className="run-card-title">Paused — needs permission</div>
+            <div className="run-card-message">
+              A permission yuh needs was turned off mid-run. Turn it back on and the run resumes
+              automatically.
+            </div>
+            <div className="fix-options">
+              <button className="fix-option" onClick={fixPermission}>
+                Fix in System Settings
+              </button>
+            </div>
+            <div className="run-card-footer">
+              Run is holding — turning it back on resumes automatically
+            </div>
+          </div>
+        )}
         {runSteps.map((step) => (
           <RunStepRow
             key={step.id}

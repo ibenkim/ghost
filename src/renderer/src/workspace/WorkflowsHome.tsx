@@ -18,6 +18,41 @@ export default function WorkflowsHome({
   onToggleStatus: (id: string) => void
   onDiscardSuggestion: () => void
 }) {
+  // 4.1 first-run — empty Library: ready-state sub-line (no zero metric),
+  // centered record CTA that parks the window and opens the record panel.
+  if (workflows.length === 0 && !suggestion) {
+    return (
+      <div className="ws-view">
+        <div className="ws-header">
+          <div>
+            <div className="ws-header-title">Workflows</div>
+            <div className="ws-header-sub">Nothing here yet — yuh is ready when you are</div>
+          </div>
+        </div>
+        <div className="ws-empty">
+          <div className="ws-empty-title">Record your first workflow</div>
+          <div className="ws-empty-desc">
+            Do the task once, the way you always do.
+            <br />
+            yuh learns the steps — then does it for you, on schedule.
+          </div>
+          <button
+            className="ws-empty-cta"
+            onClick={() => {
+              window.ghostBridge?.minimizeWindow?.()
+              window.ghostBridge?.openRecordPanel?.()
+            }}
+          >
+            +  Record a workflow
+          </button>
+          <div className="ws-empty-hint">
+            yuh will also suggest workflows when it notices you repeating things
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ws-view">
       <div className="ws-header">

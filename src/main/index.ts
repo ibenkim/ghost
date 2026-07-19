@@ -6,9 +6,25 @@ import {
   getWorkflow,
   loadStore,
   registerStoreIpc,
-  setPillPosition
+  setLastPermissionRevokeAt,
+  setOnboardingComplete,
+  setOnboardingStep,
+  setPillPosition,
+  setSession,
+  setTeam
 } from './store'
-import { createTray, destroyTray } from './tray'
+import { createTray, destroyTray, setTrayMode } from './tray'
+import {
+  getPermissions,
+  registerPermissionIpc,
+  setBeforeOpenSettings,
+  startPermissionWatch,
+  stopPermissionWatch
+} from './permissions'
+import { googleAuth, isValidEmail, sessionForEmail } from './auth'
+import { createTeam, isValidInviteCode, teamFromInvite } from './team'
+import { newId } from '../shared/id'
+import type { DeepLink, PermissionsState } from '../shared/types'
 
 let pillWindow: BrowserWindow | null = null
 let workspaceWindow: BrowserWindow | null = null
@@ -19,8 +35,16 @@ let pillBackdrop: BrowserWindow | null = null
 let panelBackdrop: BrowserWindow | null = null
 /** Fullscreen ink-20 dim behind the expanded editor. */
 let editorScrim: BrowserWindow | null = null
+/** Fullscreen onboarding overlay — the hard gate before pill/workspace. */
+let onboardingWindow: BrowserWindow | null = null
 /** Pending Library deep-link until the workspace window finishes loading. */
 let pendingWorkspaceFocus: { workflowId?: string; runId?: string } | null = null
+/** Deep-link held until the onboarding window finishes loading. */
+let pendingDeepLink: DeepLink | null = null
+/** True once the app is actually quitting (lets the gated window close). */
+let isQuitting = false
+/** Global shortcuts are registered once, only in normal (post-onboarding) mode. */
+let shortcutsRegistered = false
 /** Last AppState reported by the pill (for context-menu recording variant). */
 let pillAppState: string = 'idle'
 
@@ -34,6 +58,30 @@ const BACKDROP_INSET = 1
 
 const WORKSPACE_W = 807
 const WORKSPACE_H = 549
+
+// ── Custom URL scheme (magic-link + invite-link return paths) ──
+// Single-instance so a second `ghost://` launch routes into the running app.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', (_e, argv) => {
+    const url = argv.find((a) => a.startsWith('ghost://'))
+    if (url) handleDeepLink(url)
+    onboardingWindow?.focus()
+  })
+}
+if (is.dev && process.platform === 'win32') {
+  app.setAsDefaultProtocolClient('ghost', process.execPath, [join(__dirname, '..', '..')])
+} else {
+  app.setAsDefaultProtocolClient('ghost')
+}
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
+app.on('before-quit', () => {
+  isQuitting = true
+})
 
 function getBottomRightBounds(width: number, height: number) {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize
@@ -216,6 +264,9 @@ function normalizeWorkspaceFocus(
 }
 
 function openWorkspaceWindow(focus?: string | { workflowId?: string; runId?: string }) {
+  // Hard gate — Library is unavailable until onboarding completes.
+  if (!getSnapshot().onboardingComplete) return
+
   const normalized = normalizeWorkspaceFocus(focus)
   if (normalized) pendingWorkspaceFocus = normalized
 
@@ -747,25 +798,112 @@ ipcMain.handle('pill:contextMenu', (event) => {
   Menu.buildFromTemplate(template).popup({ window: win })
 })
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.ghost')
+// ── Onboarding gate ──
+// A fullscreen transparent overlay: the desktop shows through but stays inert
+// (the window captures all mouse events), there is no Esc/close, and quitting
+// is only possible from the tray. Relaunch returns to the persisted step.
+function createOnboardingWindow() {
+  if (onboardingWindow) {
+    onboardingWindow.show()
+    onboardingWindow.focus()
+    return
+  }
+  const { x, y, width, height } = screen.getPrimaryDisplay().bounds
+  onboardingWindow = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: false,
+    skipTaskbar: false,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true
+    }
+  })
+  onboardingWindow.setAlwaysOnTop(true, 'floating')
+  onboardingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+  // User returned from System Settings (or Cmd-Tabbed back) — restore the gate.
+  onboardingWindow.on('focus', () => {
+    promoteOnboardingOverlay()
   })
 
-  loadStore()
-  registerStoreIpc()
-
-  createPillWindow()
-  createBackdrops()
-  if (pillWindow) layoutBackdrops(pillWindow.getBounds())
-
-  createTray({
-    showPill: () => showPill(),
-    openLibrary: () => openWorkspaceWindow()
+  onboardingWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
   })
 
+  // Hard gate: no dismiss. Only a real quit (tray) may close this window.
+  onboardingWindow.on('close', (e) => {
+    if (!isQuitting && !getSnapshot().onboardingComplete) e.preventDefault()
+  })
+
+  onboardingWindow.webContents.on('did-finish-load', () => {
+    if (pendingDeepLink) {
+      onboardingWindow?.webContents.send('onboarding:deepLink', pendingDeepLink)
+      pendingDeepLink = null
+    }
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    onboardingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#onboarding`)
+  } else {
+    onboardingWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'onboarding' })
+  }
+
+  onboardingWindow.on('closed', () => {
+    onboardingWindow = null
+  })
+}
+
+function sendDeepLink(link: DeepLink) {
+  if (onboardingWindow && !onboardingWindow.webContents.isLoading()) {
+    onboardingWindow.webContents.send('onboarding:deepLink', link)
+  } else {
+    pendingDeepLink = link
+  }
+  onboardingWindow?.show()
+  onboardingWindow?.focus()
+}
+
+/** Custom-scheme handler for magic-link and invite-link return paths. */
+function handleDeepLink(rawUrl: string) {
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return
+  }
+  const host = url.hostname
+  const path = url.pathname.replace(/^\/+/, '')
+
+  if (host === 'auth' && path === 'magic') {
+    const email = url.searchParams.get('email') || 'harry@yuh.app'
+    const token = url.searchParams.get('token') || ''
+    setSession(sessionForEmail(email))
+    if (getSnapshot().onboardingStep === 'welcome') setOnboardingStep('team')
+    sendDeepLink({ kind: 'magic', email, token })
+  } else if (host === 'auth' && path === 'google') {
+    sendDeepLink({ kind: 'google' })
+  } else if (host === 'invite') {
+    const code = path || url.searchParams.get('code') || ''
+    sendDeepLink({ kind: 'invite', code })
+  }
+}
+
+function registerGlobalShortcuts() {
+  if (shortcutsRegistered) return
+  shortcutsRegistered = true
   // ⌥G — stand-in for bare Option (polish): show pill + open record panel.
   globalShortcut.register('Alt+G', () => {
     showPill()
@@ -784,15 +922,181 @@ app.whenReady().then(() => {
   })
   // ⌘L — Open Library
   globalShortcut.register('CommandOrControl+L', () => openWorkspaceWindow())
+}
+
+/** Promote from the gate to the real app (pill + workspace available). */
+function enterNormalMode(opts?: { openRecordPanel?: boolean }) {
+  setTrayMode('normal')
+  if (!pillWindow) {
+    createPillWindow()
+    createBackdrops()
+    if (pillWindow) layoutBackdrops((pillWindow as BrowserWindow).getBounds())
+  } else {
+    showPill()
+  }
+  registerGlobalShortcuts()
+  if (opts?.openRecordPanel) {
+    showPill()
+    pillWindow?.webContents.send('pill:openRecordPanel')
+  }
+}
+
+/**
+ * Tear down the signed-in surface and reopen the onboarding gate at welcome.
+ * Used by Log out — session/team clear; workflows/runs stay on disk.
+ */
+function enterOnboardingMode(): void {
+  setSession(null)
+  setTeam(null)
+  setOnboardingComplete(false)
+  setOnboardingStep('welcome')
+
+  globalShortcut.unregisterAll()
+  shortcutsRegistered = false
+  setTrayMode('onboarding')
+  setEditorScrimVisible(false)
+
+  if (workspaceWindow) {
+    workspaceWindow.destroy()
+    workspaceWindow = null
+  }
+  hidePill()
+  hideBackdrops()
+  if (pillWindow) {
+    pillWindow.destroy()
+    pillWindow = null
+  }
+  pillBackdrop?.destroy()
+  panelBackdrop?.destroy()
+  pillBackdrop = null
+  panelBackdrop = null
+
+  createOnboardingWindow()
+}
+
+/** Let the user reach System Settings: drop always-on-top while Settings is open. */
+function demoteOnboardingForSettings(): void {
+  if (!onboardingWindow || onboardingWindow.isDestroyed()) return
+  onboardingWindow.setAlwaysOnTop(false)
+  onboardingWindow.setVisibleOnAllWorkspaces(false)
+}
+
+function promoteOnboardingOverlay(): void {
+  if (!onboardingWindow || onboardingWindow.isDestroyed()) return
+  if (getSnapshot().onboardingComplete) return
+  onboardingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  onboardingWindow.setAlwaysOnTop(true, 'floating')
+}
+
+/** Record a granted→denied flip so the pill can arm the paused-permission UX. */
+function handlePermissionChange(prev: PermissionsState | null, next: PermissionsState) {
+  if (!prev || !getSnapshot().onboardingComplete) return
+  const revoked =
+    (prev.screen === 'granted' && next.screen !== 'granted') ||
+    (prev.accessibility === 'granted' && next.accessibility !== 'granted')
+  if (revoked) setLastPermissionRevokeAt(new Date().toISOString())
+}
+
+function registerOnboardingIpc() {
+  setBeforeOpenSettings(() => {
+    demoteOnboardingForSettings()
+  })
+
+  ipcMain.handle('app:openExternal', (_e, url: string) => {
+    if (typeof url === 'string') shell.openExternal(url)
+  })
+
+  ipcMain.handle('onboarding:complete', (_e, opts: { openRecordPanel?: boolean }) => {
+    setOnboardingComplete(true)
+    if (onboardingWindow) {
+      onboardingWindow.destroy()
+      onboardingWindow = null
+    }
+    enterNormalMode(opts)
+  })
+
+  ipcMain.handle('auth:logout', () => {
+    enterOnboardingMode()
+  })
+
+  // ── Mocked auth ──
+  ipcMain.handle('auth:google', async () => {
+    const session = await googleAuth()
+    setSession(session)
+    if (getSnapshot().onboardingStep === 'welcome') setOnboardingStep('team')
+    return session
+  })
+  ipcMain.handle('auth:sendMagicLink', (_e, email: string) => {
+    if (!isValidEmail(email)) return { ok: false }
+    // Simulate the emailed link arriving: fire the same deep-link path shortly.
+    setTimeout(() => {
+      handleDeepLink(
+        `ghost://auth/magic?email=${encodeURIComponent(email)}&token=${newId('mtok')}`
+      )
+    }, 1500)
+    return { ok: true }
+  })
+
+  // ── Mocked team ──
+  ipcMain.handle('team:create', () => {
+    const team = createTeam(getSnapshot().session)
+    setTeam(team)
+    setOnboardingStep('permissions')
+    return team
+  })
+  ipcMain.handle('team:join', (_e, code: string) => {
+    if (!isValidInviteCode(code)) {
+      return { ok: false, error: 'That link didn’t work — ask your team owner to re-send' }
+    }
+    const team = teamFromInvite(code)
+    setTeam(team)
+    setOnboardingStep('permissions')
+    return { ok: true, team }
+  })
+  ipcMain.handle('team:preview', (_e, code: string) => {
+    if (!isValidInviteCode(code)) return { ok: false }
+    return { ok: true, team: teamFromInvite(code) }
+  })
+}
+
+app.whenReady().then(() => {
+  electronApp.setAppUserModelId('com.ghost')
+
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
+
+  loadStore()
+  registerStoreIpc()
+  registerPermissionIpc()
+  registerOnboardingIpc()
+  startPermissionWatch(handlePermissionChange)
+
+  const onboarded = getSnapshot().onboardingComplete
+  createTray(
+    {
+      showPill: () => showPill(),
+      openLibrary: () => openWorkspaceWindow()
+    },
+    onboarded ? 'normal' : 'onboarding'
+  )
+
+  if (onboarded) enterNormalMode()
+  else createOnboardingWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createPillWindow()
+    if (!getSnapshot().onboardingComplete) {
+      createOnboardingWindow()
+      return
+    }
+    if (!pillWindow) enterNormalMode()
     else showPill()
   })
 })
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  stopPermissionWatch()
   setEditorScrimVisible(false)
   editorScrim?.destroy()
   editorScrim = null

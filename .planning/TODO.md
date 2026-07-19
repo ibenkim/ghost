@@ -98,10 +98,10 @@ Extract-then-extend; no visual redesign until Figma refs arrive per component.
 - [x] **status-pill:** formalize `GhostPill` status variants (Hello / Learning /
       Thinking / running / paused / saved) incl. amber/rose/apricot pill
       coloring as props, not ad-hoc state checks. *(shipped with Phase 2)*
-- [ ] **toast:** real component (success / error / info) replacing the
-      `toast: string` text-in-pill hack in `WorkflowContext`; slides in above
-      the pill. First consumer: the permission-revoked toast (Phase 4). (The
-      saved confirmation is a status-pill state, not a toast — see Phase 2.)
+- [x] **toast:** real component (success / error / info); slides in above the
+      pill. First consumer: the permission-revoked toast (Phase 4). (The saved
+      confirmation is a status-pill state, not a toast — see Phase 2.)
+      *(shipped with Phase 4)*
 - [x] **run-card:** one inline card component with `question` (amber) and
       `error` (rose) variants, chip grammar shared with fix-step 5.4
       (reuse chips from `StepList`). Consumed by Phase 2 (6.3/6.4) and Phase 4
@@ -181,54 +181,54 @@ Extract-then-extend; no visual redesign until Figma refs arrive per component.
 
 New surface; gate the whole app behind it via the persisted onboarding flag.
 
-- [ ] **Onboarding window + route** (`#onboarding`): centered card, desktop
+- [x] **Onboarding window + route** (`#onboarding`): centered card, desktop
       inert behind it; no Esc/dismiss; quit only via tray; relaunch returns to
       the same step (persist step progress). Pill + workspace unavailable until
       complete.
-- [ ] **Auth service (mocked behind an interface):** Continue with Google
+- [x] **Auth service (mocked behind an interface):** Continue with Google
       (system browser round-trip) and email magic link ("Check your inbox"
       sub-state); failure → quiet rose line; Terms & Privacy open in browser.
       Register a deep-link handler in main (custom URL scheme) for the
       magic-link and invite-link return paths. Real backend is a later item —
       build the flow against a stub so it can be swapped.
-- [ ] **1.2 team step:** Create (auto-named from account) / Join (inline
+- [x] **1.2 team step:** Create (auto-named from account) / Join (inline
       invite link-or-code field; invalid → rose stroke + sub-line); arrived-via-
       invite variant pre-fills Join with confirm row; Back → 1.1 showing
       signed-in account. Joining never skips permissions. Introduces the mocked
       team service + `Team` model that Phase 5 extends.
-- [ ] **Permissions service (main process):** `systemPreferences` checks +
+- [x] **Permissions service (main process):** `systemPreferences` checks +
       request for Screen Recording, Accessibility, Microphone; background
       polling; deep-links into the exact System Settings pane; relaunch-required
       handling for screen recording; expose status over IPC to both renderers.
-- [ ] **2.x checklist card:** three numbered rows reusing the step-row rail;
+- [x] **2.x checklist card:** three numbered rows reusing the step-row rail;
       counter "1 of 3" → "Done"; current row expands (why-copy + Allow +
       macOS hint), done rows collapse to check; mic row Optional with "Skip for
       now" (hollow dash); "Why does yuh need this?" popover; no skipping ahead
       except mic.
-- [ ] **3.1 denied recovery:** same card, amber "Needs your OK" state (fix-step
+- [x] **3.1 denied recovery:** same card, amber "Needs your OK" state (fix-step
       grammar), System Settings deep-link, "Check again" re-poll + background
       auto-resolve, shake on still-off; reused for all three rows. Individual
       permission cards can re-raise standalone post-onboarding; the full flow
       never replays.
-- [ ] **2.5 complete:** "Record your first workflow" → record panel open
+- [x] **2.5 complete:** "Record your first workflow" → record panel open
       (narration on iff mic granted) · "I'll explore first" → idle.
-- [ ] **3.2 permission-revoked while idle:** apricot pill dot + "Paused —
+- [x] **3.2 permission-revoked while idle:** apricot pill dot + "Paused —
       needs permission" (never auto-tucks while apricot); toast (Phase 1
       component) with the concrete stake, shown once at revocation + re-raised
       1h before any affected run; Dismiss → toast only, pill stays apricot,
       runs stay held; Fix in System Settings → deep-link; re-grant resolves
       toast + pill, held run starts if still inside its window, else Activity
       logs "Missed — permission was off".
-- [ ] **3.2 permission-revoked mid-run:** pause after the in-flight action
+- [x] **3.2 permission-revoked mid-run:** pause after the in-flight action
       (6.1 rule); panel auto-expands with the amber run-card inline at the
       active step; resolves like a question card — re-grant resumes
       automatically.
-- [ ] **Desktop permission gating:** record panel Start Recording disabled +
+- [x] **Desktop permission gating:** record panel Start Recording disabled +
       inline note when screen permission missing (routes to recovery card);
       narrate toggle reads "mic is off — turn on in Settings" when mic
       skipped/denied and re-raises the mic block as a standalone card; record +
       run paths preflight screen permission and route back to recovery.
-- [ ] **4.1 first-run empty Library:** empty-state Workflows home (ready-state
+- [x] **4.1 first-run empty Library:** empty-state Workflows home (ready-state
       sub-line, no zero metric; "Record a workflow" parks window + opens
       panel; static suggestion hint until first real Suggested card); retires
       after first save; History empty state mirrors it.

@@ -41,6 +41,7 @@ export default function ActivityView({
       </div>
 
       <div className="ws-detail-body scroll">
+        {entries.length === 0 && <div className="log-empty">Runs will show up here</div>}
         {GROUPS.map((group) => {
           const rows = entries.filter((e) => e.group === group.key)
           if (rows.length === 0) return null
