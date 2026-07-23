@@ -7,3 +7,4 @@ release/
 *.local
 .DS_Store
 .planning/
+.cursor/
