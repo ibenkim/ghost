@@ -70,6 +70,9 @@ export type EditorStep = {
   phase?: StepPhase
 }
 
+/** Personal = owner's Workflows list; team = also listed on Shared. */
+export type WorkflowScope = 'personal' | 'team'
+
 /**
  * Unified workflow entity — Library row, editor draft, and run target.
  * Pill drafts get an `id` at organize-time; Save upserts into the store.
@@ -85,6 +88,15 @@ export type Workflow = {
   /** Lifetime completed-run count shown in the Library. */
   runCount: number
   hoursReturned: string
+  /**
+   * Share scope. Defaults to `personal`. When `team`, the workflow stays in
+   * the sharer's Workflows list and also appears on Shared.
+   */
+  scope?: WorkflowScope
+  /** Member id of who shared to the team (when `scope` is `team`). */
+  sharedBy?: string
+  /** Display name for the Shared page "shared by …" chip. */
+  sharedByName?: string
 }
 
 // ── Running (ephemeral ledger in the pill) ──

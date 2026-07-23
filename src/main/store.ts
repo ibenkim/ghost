@@ -32,13 +32,29 @@ function storePath(): string {
   return join(app.getPath('userData'), 'ghost-data.json')
 }
 
+function normalizeWorkflow(raw: unknown): Workflow | null {
+  if (!raw || typeof raw !== 'object') return null
+  const w = raw as Workflow
+  if (typeof w.id !== 'string' || typeof w.name !== 'string') return null
+  const scope = w.scope === 'team' ? 'team' : 'personal'
+  return {
+    ...w,
+    scope,
+    sharedBy: typeof w.sharedBy === 'string' ? w.sharedBy : undefined,
+    sharedByName: typeof w.sharedByName === 'string' ? w.sharedByName : undefined
+  }
+}
+
 function normalizeSnapshot(raw: unknown): StoreSnapshot {
   const seed = createSeedSnapshot()
   if (!raw || typeof raw !== 'object') return seed
   const data = raw as Partial<StoreSnapshot>
+  const workflows = Array.isArray(data.workflows)
+    ? data.workflows.map(normalizeWorkflow).filter((w): w is Workflow => w != null)
+    : seed.workflows
   return {
     version: STORE_VERSION,
-    workflows: Array.isArray(data.workflows) ? data.workflows : seed.workflows,
+    workflows,
     runs: Array.isArray(data.runs) ? data.runs : [],
     activity: Array.isArray(data.activity) ? data.activity : seed.activity,
     suggestion: data.suggestion === undefined ? seed.suggestion : data.suggestion,

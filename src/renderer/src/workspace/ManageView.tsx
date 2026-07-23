@@ -3,10 +3,17 @@ import { formatInviteAge, isInviteExpired, memberShortName } from '../../../shar
 import type { Invite, Member, Team } from '../state/types'
 
 /**
- * Owner Manage Team — 3.1 members · 3.2 invite · 3.3 INVITED · 3.4 remove confirm.
- * Entry: sidebar Manage (owners only).
+ * Teams roster — same Manage surface for both roles.
+ * Owners keep invite / rename / remove; members get a view-only roster.
  */
-export default function ManageView({ team }: { team: NonNullable<Team> }) {
+export default function ManageView({
+  team,
+  canManage
+}: {
+  team: NonNullable<Team>
+  /** Owner-only actions: invite, rename, remove, resend/revoke. */
+  canManage: boolean
+}) {
   const [inviting, setInviting] = useState(false)
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState(false)
@@ -69,7 +76,7 @@ export default function ManageView({ team }: { team: NonNullable<Team> }) {
     <div className="ws-view">
       <div className="ws-header">
         <div className="manage-header-left">
-          {renaming ? (
+          {renaming && canManage ? (
             <input
               ref={renameRef}
               className="ws-rename-input manage-rename-input"
@@ -94,64 +101,71 @@ export default function ManageView({ team }: { team: NonNullable<Team> }) {
             </>
           )}
         </div>
-        <div className="manage-header-actions">
-          {inviting ? (
-            <div className={`manage-invite-field ${emailError ? 'manage-invite-field-error' : ''}`}>
-              <input
-                ref={inviteRef}
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  setEmailError(false)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    void sendInvite()
-                  }
-                  if (e.key === 'Escape') {
-                    setInviting(false)
-                    setEmail('')
+        {canManage && (
+          <div className="manage-header-actions">
+            {inviting ? (
+              <div className={`manage-invite-field ${emailError ? 'manage-invite-field-error' : ''}`}>
+                <input
+                  ref={inviteRef}
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
                     setEmailError(false)
-                  }
-                }}
-              />
-              {emailError && (
-                <div className="manage-invite-error">That doesn’t look like an email</div>
-              )}
-            </div>
-          ) : (
-            <>
-              <button
-                className="btn-small-outline"
-                onClick={() => {
-                  setInviting(true)
-                  setEmailError(false)
-                }}
-              >
-                Invite to Team
-              </button>
-              <button
-                className="btn-small-outline"
-                onClick={() => {
-                  setNameDraft(team.name)
-                  setRenaming(true)
-                }}
-              >
-                Edit
-              </button>
-            </>
-          )}
-        </div>
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void sendInvite()
+                    }
+                    if (e.key === 'Escape') {
+                      setInviting(false)
+                      setEmail('')
+                      setEmailError(false)
+                    }
+                  }}
+                />
+                {emailError && (
+                  <div className="manage-invite-error">That doesn’t look like an email</div>
+                )}
+              </div>
+            ) : (
+              <>
+                <button
+                  className="btn-small-outline"
+                  onClick={() => {
+                    setInviting(true)
+                    setEmailError(false)
+                  }}
+                >
+                  Invite to Team
+                </button>
+                <button
+                  className="btn-small-outline"
+                  onClick={() => {
+                    setNameDraft(team.name)
+                    setRenaming(true)
+                  }}
+                >
+                  Edit
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="manage-section">
         <div className="manage-section-label">MEMBERS</div>
         <div className="ws-rows">
           {members.map((m) => (
-            <MemberRow key={m.id} member={m} onRemove={() => setRemoveTarget(m)} />
+            <MemberRow
+              key={m.id}
+              member={m}
+              canManage={canManage}
+              onRemove={() => setRemoveTarget(m)}
+            />
           ))}
         </div>
       </div>
@@ -161,13 +175,13 @@ export default function ManageView({ team }: { team: NonNullable<Team> }) {
           <div className="manage-section-label">INVITED</div>
           <div className="ws-rows">
             {invites.map((invite) => (
-              <InvitedRow key={invite.id} invite={invite} />
+              <InvitedRow key={invite.id} invite={invite} canManage={canManage} />
             ))}
           </div>
         </div>
       )}
 
-      {removeTarget && (
+      {removeTarget && canManage && (
         <div
           className="ws-scrim"
           onClick={() => setRemoveTarget(null)}
@@ -207,8 +221,16 @@ export default function ManageView({ team }: { team: NonNullable<Team> }) {
   )
 }
 
-function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void }) {
-  const canRemove = member.role !== 'owner' && !member.isSelf
+function MemberRow({
+  member,
+  canManage,
+  onRemove
+}: {
+  member: Member
+  canManage: boolean
+  onRemove: () => void
+}) {
+  const canRemove = canManage && member.role !== 'owner' && !member.isSelf
   return (
     <div className={`ws-row manage-member-row ${canRemove ? 'manage-member-removable' : ''}`}>
       <span className="ws-row-name">{member.name}</span>
@@ -231,7 +253,7 @@ function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void 
   )
 }
 
-function InvitedRow({ invite }: { invite: Invite }) {
+function InvitedRow({ invite, canManage }: { invite: Invite; canManage: boolean }) {
   const expired = isInviteExpired(invite)
   const age = formatInviteAge(invite)
   return (
@@ -239,18 +261,22 @@ function InvitedRow({ invite }: { invite: Invite }) {
       <span className="manage-invite-email">{invite.email}</span>
       <span className="manage-invite-age">· {age}</span>
       <span className="manage-invite-spacer" />
-      <button
-        className="manage-invite-resend"
-        onClick={() => void window.ghostBridge?.teamResendInvite?.(invite.id)}
-      >
-        Resend
-      </button>
-      <button
-        className="manage-invite-revoke"
-        onClick={() => void window.ghostBridge?.teamRevokeInvite?.(invite.id)}
-      >
-        Revoke
-      </button>
+      {canManage && (
+        <>
+          <button
+            className="manage-invite-resend"
+            onClick={() => void window.ghostBridge?.teamResendInvite?.(invite.id)}
+          >
+            Resend
+          </button>
+          <button
+            className="manage-invite-revoke"
+            onClick={() => void window.ghostBridge?.teamRevokeInvite?.(invite.id)}
+          >
+            Revoke
+          </button>
+        </>
+      )}
     </div>
   )
 }

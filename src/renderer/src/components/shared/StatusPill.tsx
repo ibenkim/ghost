@@ -19,7 +19,7 @@ type StatusPillProps = {
 }
 
 /**
- * Formalized pill status surface — Hello / Learning / Thinking / running /
+ * Formalized pill status surface — idle mark / Learning / Thinking / running /
  * paused / saved. Tone props carry amber/rose/teal/apricot coloring.
  */
 export default function StatusPill({

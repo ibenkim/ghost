@@ -1,4 +1,14 @@
-/* ══ Employee workspace window (807×549, white, r20) ══ */
+/* ══ Employee workspace window (807×549, white, r20) ══
+ * Shell padding matches main's WORKSPACE_SHADOW_PAD so the card shadow
+ * (blur 30 + #3E2B49 @ 20%) can paint outside the opaque chrome. */
+
+.workspace-shell {
+  width: 100%;
+  height: 100%;
+  padding: 36px;
+  box-sizing: border-box;
+  background: transparent;
+}
 
 .workspace-window {
   position: relative;
@@ -12,17 +22,19 @@
   overflow: hidden;
 }
 
-/* Top title-bar strip across sidebar + content (traffic lights stay clickable). */
+/* Top title-bar strip — IPC drag (same pill:dragStart path), not CSS
+ * -webkit-app-region (flaky on transparent frameless windows).
+ * z-index above .workspace-content so the strip stays hittable. */
 .ws-drag-strip {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 28px;
-  z-index: 5;
-  -webkit-app-region: drag;
-  app-region: drag;
+  height: 40px;
+  z-index: 30;
+  cursor: grab;
 }
+.ws-drag-strip:active { cursor: grabbing; }
 
 /* ── Sidebar (172px) ── */
 .ws-sidebar {
@@ -39,7 +51,7 @@
 
 .traffic-lights {
   position: relative;
-  z-index: 6;
+  z-index: 31;
   display: flex;
   gap: 9px;
   padding: 2px 0 14px 2px;
@@ -53,8 +65,8 @@
 }
 .light-close,
 .light-min {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+  position: relative;
+  z-index: 6;
 }
 .light-close { background: #ff736a; }
 .light-min { background: #febc2e; }
@@ -175,7 +187,9 @@
   gap: 12px;
   margin-bottom: 18px;
   flex-shrink: 0;
+  cursor: grab;
 }
+.ws-header:active { cursor: grabbing; }
 .ws-header-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .ws-header-sub { font-size: 11px; color: var(--text-30); margin-top: 1px; }
 .ws-detail-title { font-size: 15px; font-weight: 600; color: var(--text); line-height: 16px; }

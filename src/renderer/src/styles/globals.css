@@ -37,12 +37,12 @@
   --teal-soft: rgba(42, 157, 143, 0.16);
 
   /*
-   * Surfaces — Figma glass: idle fill 0.15 / hover panel fill 0.2.
+   * Surfaces — v4 transparent windows: #161427 @ 15% on pill + panel.
    * Real frost comes from the native vibrancy backdrop windows the main
    * process keeps aligned behind the pill and the panel slot.
    */
   --glass-bg: rgba(22, 20, 39, 0.15);
-  --glass-panel-bg: rgba(22, 20, 39, 0.2);
+  --glass-panel-bg: rgba(22, 20, 39, 0.15);
   --panel-shadow: 0px 4px 30px rgba(62, 43, 73, 0.2);
   --pill-shadow: 0px 4px 30px rgba(98, 91, 143, 0.4);
 }
@@ -94,7 +94,7 @@ html, body, #root {
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: 'Instrument Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   font-size: 11px;
   color: var(--text);
@@ -117,6 +117,15 @@ button {
   padding: 10px;
 }
 
+/*
+ * Brief inactive wash when switching away from Ghost on macOS — matches the
+ * native window-switch dim without leaving a persistent gray box (Phase 2).
+ */
+.ghost-root.os-switch-flash .pill,
+.ghost-root.os-switch-flash .morph-panel > * {
+  filter: brightness(0.78) saturate(0.7);
+}
+
 /* Pill mode: the window is sized exactly to the pill. */
 .ghost-root-pill {
   padding: 0;
@@ -124,12 +133,26 @@ button {
 }
 .ghost-root-pill .pill {
   width: 100%;
-  /* Never stretch with the window — height is always the 24px pill. */
   height: 24px;
   min-height: 24px;
   max-height: 24px;
   box-shadow: none;
   animation: none;
+}
+/* Idle mark capsule — never inherit a mid-morph window width.
+ * Teal (saved) / apricot (permission) glass pills size with the window. */
+.ghost-root-pill .pill-glass:not(.pill-teal):not(.pill-apricot) {
+  width: 94px;
+  min-width: 94px;
+  max-width: 94px;
+  box-sizing: border-box;
+}
+.ghost-root-pill .pill-teal,
+.ghost-root-pill .pill-apricot {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 /*
@@ -188,14 +211,17 @@ button {
 .ghost-root-glass .pill {
   position: relative;
   z-index: 2;
-  width: 100%;
+  /* Compact length always — never stretch to the panel / window width. */
+  width: auto;
+  min-width: 94px;
+  max-width: 94px;
+  align-self: flex-end;
   height: 24px;
   min-height: 24px;
   max-height: 24px;
   flex-shrink: 0;
   box-shadow: none;
   animation: none;
-  /* Hide anything that would show through the Hello capsule. */
   isolation: isolate;
 }
 .ghost-root-glass .pill.glass-stroke,
@@ -224,7 +250,7 @@ button {
   width: 100%;
 }
 
-/* Fade in only after the width stretch; stay clipped by the slot. */
+/* Fade in with the bounds ease; stay clipped by the slot. */
 .morph-panel {
   width: 100%;
   flex: 0 0 auto;
@@ -238,9 +264,7 @@ button {
   transform-origin: top right;
 }
 .morph-panel-in {
-  /* Fade in as the height phase starts (~0.2s into the 0.42s morph) so the
-     panel rides the growing slab instead of popping in after it. */
-  animation: glassMorphIn 0.26s ease-out 0.18s both;
+  animation: glassMorphIn 0.28s ease-out both;
 }
 .morph-panel-out {
   animation: glassMorphOut 0.18s ease-in both;
@@ -275,7 +299,8 @@ button {
   max-height: 24px;
   flex-shrink: 0;
   box-sizing: border-box;
-  border-radius: 10px;
+  /* Capsule = half of 24px height; stroke (::after) inherits the same radius. */
+  border-radius: 12px;
   padding: 0 6px 0 3px;
   user-select: none;
   animation: pillIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -298,6 +323,20 @@ button {
   transition: filter 0.15s, transform 0.15s;
 }
 .pill-glass:hover, .pill-ready { filter: brightness(1.12); }
+
+/* Idle mark — two circles replacing the old "Hello" label. */
+.pill-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pill-mark-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--white-text);
+  opacity: 0.92;
+}
 
 /* Recording / editing / running: white with purple border */
 .pill-active {
@@ -425,7 +464,8 @@ button {
   padding: 4px 14px;
   white-space: nowrap;
 }
-.btn-small-outline:hover { background: rgba(0, 0, 0, 0.04); }
+.btn-small-outline:hover:not(:disabled) { background: rgba(0, 0, 0, 0.04); }
+.btn-small-outline:disabled { opacity: 0.45; cursor: default; }
 
 .btn-text {
   background: transparent;
@@ -445,7 +485,13 @@ button {
   border: none;
   color: var(--danger);
   font-size: 11px;
-  padding: 0;
+  padding: 3px 6px;
+  margin: -3px -6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.cancel-link:hover {
+  background: rgba(229, 55, 43, 0.12);
 }
 
 .chevron-btn {
@@ -483,7 +529,64 @@ button {
   font-weight: 600;
   color: var(--text);
   vertical-align: middle;
+  position: relative;
 }
 .app-chip svg { border-radius: 4px; }
 .app-chip-muted { color: var(--text-40); }
 .app-chip-muted svg { opacity: 0.55; }
+.app-chip-editable { cursor: default; }
+.app-chip-blank {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-40);
+  cursor: pointer;
+  border-bottom: 1px dashed var(--text-30);
+  padding: 0 2px;
+}
+.app-chip-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+  color: var(--icon-color);
+}
+.app-chip-actions button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  padding: 0;
+  cursor: pointer;
+}
+.app-chip-actions button:hover { color: var(--text-70); }
+.app-chip-picker {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+  padding: 4px;
+  background: #fff;
+  border: 0.5px solid var(--text-15);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(62, 43, 73, 0.14);
+}
+.app-chip-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.app-chip-pick:hover,
+.app-chip-pick-active { background: var(--white3); }

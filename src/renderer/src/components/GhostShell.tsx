@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWorkflow } from '../state/WorkflowContext'
 import GhostPill from './GhostPill'
 import RecordPanel from './panels/RecordPanel'
@@ -25,6 +25,7 @@ export default function GhostShell() {
     fixPermission,
     dismissPermToast
   } = useWorkflow()
+  const [switchFlash, setSwitchFlash] = useState(false)
 
   // The hover window hugs its content exactly (no padding) — measure the
   // panel and report its height for window sizing.
@@ -37,6 +38,36 @@ export default function GhostShell() {
     observer.observe(el)
     return () => observer.disconnect()
   }, [state, reportHoverPanelHeight])
+
+  /**
+   * Brief macOS-like inactive wash on the pill + panel when switching to
+   * another desktop window (Cmd-Tab / click away). Not a persistent gray box.
+   */
+  useEffect(() => {
+    let flashTimer: ReturnType<typeof setTimeout> | null = null
+    function onBlur() {
+      setSwitchFlash(true)
+      if (flashTimer) clearTimeout(flashTimer)
+      flashTimer = setTimeout(() => {
+        setSwitchFlash(false)
+        flashTimer = null
+      }, 160)
+    }
+    function onFocus() {
+      if (flashTimer) {
+        clearTimeout(flashTimer)
+        flashTimer = null
+      }
+      setSwitchFlash(false)
+    }
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
+      if (flashTimer) clearTimeout(flashTimer)
+    }
+  }, [])
 
   /**
    * Record-panel dismissal rules (panel opens only by clicking the pill):
@@ -80,7 +111,8 @@ export default function GhostShell() {
     pillMode ? 'ghost-root-pill' : '',
     state === 'hover' ? 'ghost-root-glass' : '',
     state === 'hover' && hoverFading ? 'ghost-root-closing' : '',
-    !pillMode && panelPlacement === 'below' ? 'ghost-root-below' : ''
+    !pillMode && panelPlacement === 'below' ? 'ghost-root-below' : '',
+    switchFlash ? 'os-switch-flash' : ''
   ]
     .filter(Boolean)
     .join(' ')

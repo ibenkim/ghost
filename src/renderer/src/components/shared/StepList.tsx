@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { EditorStep } from '../../state/types'
-import AppChip from './AppChip'
+import type { EditorStep, StepApp } from '../../state/types'
+import AppChip, { AppChipBlank, isAppSlotLabel, withAppSlotBlank } from './AppChip'
 import MicIcon from '../ui/MicIcon'
 import { PencilIcon } from './TriggerSection'
 
@@ -127,6 +127,39 @@ export default function StepList({ steps, onChange, initialEditStepId }: StepLis
     )
   }
 
+  function changeStepApp(step: EditorStep, app: StepApp) {
+    if (isAppSlotLabel(step.title)) {
+      // Slot step: swap the chip; keep "Open … in" wording (chip shows the app).
+      const title = withAppSlotBlank(step.title).replace(/\s*___+\s*$/, '').trim()
+      onChange((s) => s.map((x) => (x.id === step.id ? { ...x, app, title } : x)))
+      return
+    }
+    // Unique-to-app: changing the chip rewrites the whole event (open edit).
+    onChange((s) => s.map((x) => (x.id === step.id ? { ...x, app } : x)))
+    beginEdit({ ...step, app })
+  }
+
+  function removeStepApp(step: EditorStep) {
+    if (isAppSlotLabel(step.title)) {
+      onChange((s) =>
+        s.map((x) =>
+          x.id === step.id
+            ? { ...x, app: undefined, title: withAppSlotBlank(x.title) }
+            : x
+        )
+      )
+      return
+    }
+    // Unique-to-app: removing the chip opens a whole-event edit.
+    onChange((s) => s.map((x) => (x.id === step.id ? { ...x, app: undefined } : x)))
+    beginEdit({ ...step, app: undefined })
+  }
+
+  function pickSlotApp(step: EditorStep, app: StepApp) {
+    const title = withAppSlotBlank(step.title).replace(/\s*___+\s*$/, '').trim()
+    onChange((s) => s.map((x) => (x.id === step.id ? { ...x, app, title } : x)))
+  }
+
   return (
     <div className="step-list">
       {steps.map((step) => {
@@ -221,8 +254,17 @@ export default function StepList({ steps, onChange, initialEditStepId }: StepLis
                 <span className="step-title step-forming">Forming new step…</span>
               ) : (
                 <span className="step-title">
-                  {step.title}
-                  {step.app && <AppChip app={step.app} />}
+                  {step.title.replace(/\s*___+\s*$/, '').trim()}
+                  {step.app ? (
+                    <AppChip
+                      app={step.app}
+                      editable
+                      onChangeApp={(app) => changeStepApp(step, app)}
+                      onRemoveApp={() => removeStepApp(step)}
+                    />
+                  ) : isAppSlotLabel(step.title) ? (
+                    <AppChipBlank onPick={(app) => pickSlotApp(step, app)} />
+                  ) : null}
                 </span>
               )}
               {fixToken && !isEditing && !isForming && (

@@ -174,7 +174,7 @@ export default function GhostPill() {
     )
   }
 
-  // ── Idle / hover: Hello, or teal saved confirmation ──
+  // ── Idle / hover: two-circle mark, or teal saved confirmation ──
   if (savedConfirm && state === 'idle') {
     return (
       <StatusPill
@@ -190,10 +190,20 @@ export default function GhostPill() {
 
   return (
     <StatusPill
-      label="Hello"
+      label={<IdleMark />}
       className={state === 'hover' ? 'pill-ready' : ''}
       {...sharedProps}
     />
+  )
+}
+
+/** Idle mark — two circles in place of the old "Hello" label. */
+function IdleMark() {
+  return (
+    <span className="pill-mark" aria-label="Ghost">
+      <span className="pill-mark-dot" />
+      <span className="pill-mark-dot" />
+    </span>
   )
 }
 

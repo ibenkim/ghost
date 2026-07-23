@@ -86,6 +86,60 @@ Completed and shipped items.
 - [x] Activity / workflows / detail baseline unchanged from employee workspace
 - [x] Verified: `tsc`
 
+## 2026-07-22 — v4 Phase 0 (fonts + glass)
+
+- [x] Bundled Instrument Sans via `@fontsource/instrument-sans` (400/500/600);
+      imported in `main.tsx`; global stack drops Inter as primary fallback
+- [x] Transparent glass tokens: `--glass-bg` + `--glass-panel-bg` both
+      `#161427` (`rgba(22, 20, 39, 0.15)`)
+- [x] Verified: `tsc`, `electron-vite build` (woff2 assets emitted)
+
+## 2026-07-23 — v4 Phase 1 (Pill + hover / record UI)
+
+- [x] Idle pill: two-circle mark replaces “Hello”; glass mode keeps compact
+      94px length (CSS + right-aligned vibrancy backdrop)
+- [x] Narrate toggle: purple on-knob + light Settings link on glass
+- [x] Border radii: pill capsule 12px (stroke inherits); segment inner 4px
+- [x] Selected segment re-hover darker; Start Recording hover white/black
+- [x] Cancel + editor ✕ hover: light red bg, radius 6
+- [x] Drag extended via shared `useWindowDrag` + `beginDrag` keep-open for
+      hover + expanded recording (same `pill:dragStart` path)
+- [x] Verified: `tsc`, `electron-vite build`
+
+## 2026-07-23 — v4 Phase 2 (Summary / desktop window behavior)
+
+- [x] Summary movable via shared `useWindowDrag` / `pill:dragStart`;
+      `beginDrag` keeps summary open (same path as Phase 1 panels)
+- [x] Summary wired to existing `setEditorScrim`; scrim + vibrancy backdrops
+      only while pill is frontmost; summary drops always-on-top on blur so
+      other apps can come forward (fixes gray-box overlay when switching)
+- [x] Trigger row: white at rest, grey + chevron on hover (Editor /
+      WorkflowDetail — not on SummaryPanel)
+- [x] App chip edit/delete on summary (+ StepList inherit): slot steps →
+      `___` prompt; unique-to-app → whole-event edit
+- [x] Verified: `electron-vite build`
+
+## 2026-07-23 — v4 Phase 3 (Library chrome)
+
+- [x] Library card shadow visible: window padded for blur-30 + `#3E2B49`
+      @ 20% CSS shadow (was clipped by exact content-sized bounds)
+- [x] Library draggable via shared `pill:dragStart` IPC (main skips
+      pill collapse/anchor for workspace); `useWorkspaceDrag` on strip
+- [x] Brief macOS window-switch gray flash on pill + panel (`os-switch-flash`)
+- [x] Verified: `electron-vite build`
+
+## 2026-07-23 — v4 Phase 4 (Teams + Shared + Share to Team)
+
+- [x] `Workflow` share fields: `scope` / `sharedBy` / `sharedByName`; store
+      normalizes on load
+- [x] Sidebar **Teams** (both roles) reuses `ManageView`; owner-gated
+      invite/rename/remove; Manage-only nav removed
+- [x] Sidebar **Shared** reuses `WorkflowsHome` row grammar +
+      `manage-role-chip` for “shared by …”
+- [x] Workflow Detail header **Share to Team** (Employee + Owner); shared
+      workflows stay in Workflows and appear on Shared via the store
+- [x] Verified: `tsc -b`, `electron-vite build`
+
 ---
 
 > Items land here once work is complete and confirmed working.

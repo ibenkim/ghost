@@ -117,20 +117,22 @@ export function normalizeTeam(team: Team, session?: Session): Team {
   }
   // Phase 4 → 5 migration: rebuild a Manage-ready mocked roster.
   if (team.role === 'owner') {
-    const rebuilt = createTeam(session)
+    const rebuilt = createTeam(session ?? null)
+    if (!rebuilt) return team
     return {
       ...rebuilt,
       id: team.id,
       name: team.name,
-      role: 'owner'
+      role: 'owner' as const
     }
   }
   const joined = teamFromInvite(team.id, session)
+  if (!joined) return team
   return {
     ...joined,
     id: team.id,
     name: team.name,
-    role: 'member'
+    role: 'member' as const
   }
 }
 

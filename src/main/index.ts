@@ -67,8 +67,16 @@ const GLASS_GAP = 8
 /** Backdrops sit 1px inside the CSS tint so corner radii never poke out. */
 const BACKDROP_INSET = 1
 
-const WORKSPACE_W = 807
-const WORKSPACE_H = 549
+/** Content size of the Library card (matches `.workspace-window`). */
+const WORKSPACE_CONTENT_W = 807
+const WORKSPACE_CONTENT_H = 549
+/**
+ * Transparent inset so the CSS shadow (blur 30 + `#3E2B49` @ 20%) can paint
+ * outside the opaque card — Electron clips shadows to the window bounds.
+ */
+const WORKSPACE_SHADOW_PAD = 36
+const WORKSPACE_W = WORKSPACE_CONTENT_W + WORKSPACE_SHADOW_PAD * 2
+const WORKSPACE_H = WORKSPACE_CONTENT_H + WORKSPACE_SHADOW_PAD * 2
 
 // ── Custom URL scheme (magic-link + invite-link return paths) ──
 // Single-instance so a second `ghost://` launch routes into the running app.
@@ -158,13 +166,17 @@ function createPillWindow() {
     pillWindow = null
   })
 
+  pillWindow.on('blur', () => onPillFocusChange(false))
+  pillWindow.on('focus', () => onPillFocusChange(true))
+
   // Backdrops shadow the pill window's visibility exactly.
   pillWindow.on('hide', () => {
     hideBackdrops()
-    setEditorScrimVisible(false)
+    editorScrim?.setOpacity(0)
   })
   pillWindow.on('show', () => {
     if (pillWindow) layoutBackdrops(pillWindow.getBounds())
+    applyEditorScrim()
   })
 }
 
@@ -228,11 +240,15 @@ function layoutBackdrops(b: Rect) {
   const inset = BACKDROP_INSET
   const below = currentMode === 'glass' && currentPlacement === 'below'
   const pillTop = currentMode === 'pill' || below ? b.y : b.y + b.height - PILL_HEIGHT
+  // Glass mode: pill blur stays compact (PILL_W) at the trailing edge —
+  // never stretch to the panel / window width.
+  const pillW = currentMode === 'glass' ? PILL_W : b.width
+  const pillX = currentMode === 'glass' ? b.x + b.width - pillW : b.x
   pillBackdrop.setBounds(
     {
-      x: b.x + inset,
+      x: pillX + inset,
       y: pillTop + inset,
-      width: Math.max(1, b.width - inset * 2),
+      width: Math.max(1, pillW - inset * 2),
       height: Math.max(1, Math.min(PILL_HEIGHT, b.height) - inset * 2)
     },
     false
@@ -336,8 +352,17 @@ function hidePill() {
   pillWindow?.hide()
 }
 
+/** Desired scrim visibility from the renderer — applied only while pill is frontmost. */
+let editorScrimWanted = false
+
 function setEditorScrimVisible(visible: boolean) {
-  if (!visible) {
+  editorScrimWanted = visible
+  applyEditorScrim()
+}
+
+function applyEditorScrim() {
+  const show = editorScrimWanted && Boolean(pillWindow?.isVisible()) && Boolean(pillWindow?.isFocused())
+  if (!show) {
     editorScrim?.setOpacity(0)
     return
   }
@@ -379,6 +404,28 @@ function setEditorScrimVisible(visible: boolean) {
   pillWindow?.moveTop()
 }
 
+/**
+ * Summary can sit behind other apps when the user focuses them; other pill
+ * states stay always-on-top. Vibrancy backdrops hide on blur so they don't
+ * paint a gray box over the desktop / other windows.
+ */
+function onPillFocusChange(focused: boolean) {
+  applyEditorScrim()
+  if (!pillWindow) return
+  if (focused) {
+    if (pillAppState === 'summary') {
+      pillWindow.setAlwaysOnTop(true, 'floating')
+      pillWindow.moveTop()
+    }
+    layoutBackdrops(pillWindow.getBounds())
+  } else {
+    hideBackdrops()
+    if (pillAppState === 'summary') {
+      pillWindow.setAlwaysOnTop(false)
+    }
+  }
+}
+
 // ── IPC: pill window sizing ──
 // The pill's bottom-right corner is tracked as a persistent screen anchor:
 // resizes never derive it from live bounds (which drift mid-drag), resizes
@@ -394,9 +441,9 @@ type BoundsRequest = {
   /** Ease window bounds over this many ms. */
   durationMs?: number
   /**
-   * Pill-driven morph: the pill BR is the only anchor. Open eases width
-   * first (horizontal pill stretch), then height (panel reveal). Close
-   * reverses — height first, then width.
+   * Pill-driven morph: the pill BR is the only anchor. Open jumps to the full
+   * glass frame and returns placement immediately (so above/below CSS matches
+   * geometry). Close fades the panel then snaps to pill size.
    */
   pillDrive?: boolean
 }
@@ -530,7 +577,7 @@ function pillAnchorFromWindow(win: BrowserWindow): { x: number; y: number } {
   return pillAnchorFromBounds(win.getBounds())
 }
 
-function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
+function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement | Promise<Placement> {
   const width = Math.round(req.w)
   const height = Math.round(req.h)
   const durationMs = Math.max(0, req.durationMs ?? 0)
@@ -566,7 +613,6 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
   }
   trial.x = Math.min(Math.max(trial.x, wa.x), wa.x + wa.width - width)
 
-  const glassPlacement = currentPlacement
   currentInsets = insets
   currentPlacement = req.mode === 'pill' ? 'above' : placement
   currentMode = req.mode
@@ -587,67 +633,54 @@ function applyBounds(win: BrowserWindow, req: BoundsRequest): Placement {
 
   if (durationMs <= 0 || alreadyThere) {
     setPillBounds(win, target)
-  } else if (pillDrive) {
-    // Pill BR fixed. Horizontal stretch is phase 1 on open / phase 2 on close.
-    const opening = target.height > from.height + 4
-    const widthMs = Math.round(durationMs * (opening ? 0.48 : 0.42))
-    const heightMs = Math.max(1, durationMs - widthMs)
-    const openPlacement = placement
-    const closePlacement = glassPlacement === 'below' ? 'below' : 'above'
-
-    if (opening) {
-      const widePill = rectFromPillAnchor(
-        anchorBefore,
-        target.width,
-        PILL_HEIGHT,
-        openPlacement,
-        insets
-      )
-      widePill.x = Math.min(
-        Math.max(widePill.x, wa.x),
-        wa.x + wa.width - widePill.width
-      )
-      runBoundsEase(win, from, widePill, widthMs, easeOpen, () => {
-        runBoundsEase(win, widePill, target, heightMs, easeOpen, () => {
-          pillDriveLock = false
-          // Apply any deferred glass size correction now that morph finished.
-          if (pendingBounds && pillWindow) {
-            const pending = pendingBounds
-            pendingBounds = null
-            if (pending.h >= PILL_HEIGHT + 40) {
-              applyBounds(pillWindow, { ...pending, durationMs: 0, pillDrive: false })
-            }
-          }
-        })
-      })
-    } else {
-      const widePill = rectFromPillAnchor(
-        anchorBefore,
-        from.width,
-        PILL_HEIGHT,
-        closePlacement,
-        0
-      )
-      widePill.x = Math.min(
-        Math.max(widePill.x, wa.x),
-        wa.x + wa.width - widePill.width
-      )
-      runBoundsEase(win, from, widePill, heightMs, easeClose, () => {
-        runBoundsEase(win, widePill, target, widthMs, easeClose, () => {
-          pillDriveLock = false
-        })
-      })
-    }
-  } else {
-    const ease = req.mode === 'pill' ? easeClose : easeOpen
-    runBoundsEase(win, from, target, durationMs, ease)
+    return placement
   }
 
+  if (pillDrive) {
+    const opening = target.height > from.height + 4
 
-  return placement
+    return new Promise((resolve) => {
+      const releaseLock = () => {
+        pillDriveLock = false
+        if (opening && pendingBounds && pillWindow) {
+          const pending = pendingBounds
+          pendingBounds = null
+          if (pending.h >= PILL_HEIGHT + 40) {
+            applyBounds(pillWindow, { ...pending, durationMs: 0, pillDrive: false })
+          }
+        }
+      }
+
+      if (opening) {
+        // Instant full glass frame pinned to the pill BR.
+        setPillBounds(win, target)
+        // Resolve placement immediately so renderer applies above/below CSS
+        // before the fade — delayed resolve caused below opens to paint as
+        // above then teleport.
+        resolve(placement)
+        setTimeout(releaseLock, durationMs)
+      } else {
+        // Close: let the panel CSS-fade, then snap to pill size. Animating
+        // height at full width left a 266×24 strip (close glitch).
+        const fadeMs = Math.min(200, Math.max(120, durationMs))
+        setTimeout(() => {
+          setPillBounds(win, target)
+          releaseLock()
+          resolve(placement)
+        }, fadeMs)
+      }
+    })
+  }
+
+  const ease = req.mode === 'pill' ? easeClose : easeOpen
+  return new Promise((resolve) => {
+    runBoundsEase(win, from, target, durationMs, ease, () => resolve(placement))
+  })
 }
 
-ipcMain.handle('window:setBounds', (event, req: BoundsRequest): Placement => {
+ipcMain.handle(
+  'window:setBounds',
+  async (event, req: BoundsRequest): Promise<Placement> => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || win !== pillWindow) return 'above'
   if (dragTimer) {
@@ -655,12 +688,12 @@ ipcMain.handle('window:setBounds', (event, req: BoundsRequest): Placement => {
     // a glass shell with the Hello pill still painted under the panel.
     if (req.mode === 'pill') {
       pendingBounds = null
-      return applyBounds(win, req)
+      return await Promise.resolve(applyBounds(win, req))
     }
     pendingBounds = req
     return currentPlacement
   }
-  return applyBounds(win, req)
+  return await Promise.resolve(applyBounds(win, req))
 })
 
 // ── IPC: workspace window lifecycle ──
@@ -679,7 +712,12 @@ ipcMain.handle('editor:setScrim', (_event, visible: boolean) => {
   setEditorScrimVisible(Boolean(visible))
 })
 ipcMain.handle('pill:setAppState', (_event, next: string) => {
+  const prev = pillAppState
   pillAppState = typeof next === 'string' ? next : 'idle'
+  // Leaving summary restores always-on-top (summary drops it on blur).
+  if (prev === 'summary' && pillAppState !== 'summary' && pillWindow) {
+    pillWindow.setAlwaysOnTop(true, 'floating')
+  }
 })
 
 // ── IPC: workspace → pill commands ──
@@ -719,13 +757,18 @@ ipcMain.handle(
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win) return
 
-  // Collapse only when the renderer asks (unpinned hover). If the user has
-  // clicked the panel open, keep glass and drag the whole UI.
-  cancelBoundsAnim()
-  const collapseToPill = payload?.collapseToPill !== false
-  if (collapseToPill && currentMode !== 'pill') {
-    pillAnchor = pillAnchorFromWindow(win)
-    applyBounds(win, { w: PILL_W, h: PILL_H, mode: 'pill' })
+  // Same IPC path moves the Library window; skip pill-only collapse/anchor.
+  const isPill = win === pillWindow
+
+  if (isPill) {
+    // Collapse only when the renderer asks (unpinned hover). If the user has
+    // clicked the panel open, keep glass and drag the whole UI.
+    cancelBoundsAnim()
+    const collapseToPill = payload?.collapseToPill !== false
+    if (collapseToPill && currentMode !== 'pill') {
+      pillAnchor = pillAnchorFromWindow(win)
+      applyBounds(win, { w: PILL_W, h: PILL_H, mode: 'pill' })
+    }
   }
 
   // Recompute grab offset from the (possibly just-shrunk) window.
@@ -733,16 +776,17 @@ ipcMain.handle(
   const b0 = win.getBounds()
   const grab = { x: cursor0.x - b0.x, y: cursor0.y - b0.y }
 
-
   if (dragTimer) clearInterval(dragTimer)
   dragTimer = setInterval(() => {
     const cursor = screen.getCursorScreenPoint()
     const nx = Math.round(cursor.x - grab.x)
     const ny = Math.round(cursor.y - grab.y)
     win.setPosition(nx, ny)
-    const bounds = win.getBounds()
-    pillAnchor = pillAnchorFromBounds(bounds)
-    layoutBackdrops(bounds)
+    if (isPill) {
+      const bounds = win.getBounds()
+      pillAnchor = pillAnchorFromBounds(bounds)
+      layoutBackdrops(bounds)
+    }
   }, 16)
   }
 )
@@ -752,14 +796,14 @@ ipcMain.handle('pill:dragEnd', (event) => {
     dragTimer = null
   }
   const win = BrowserWindow.fromWebContents(event.sender)
-  if (win) {
+  if (win && win === pillWindow) {
     pillAnchor = pillAnchorFromWindow(win)
     setPillPosition({ x: pillAnchor.x, y: pillAnchor.y })
-  }
-  if (win && pendingBounds) {
-    const req = pendingBounds
-    pendingBounds = null
-    applyBounds(win, req)
+    if (pendingBounds) {
+      const req = pendingBounds
+      pendingBounds = null
+      applyBounds(win, req)
+    }
   }
 })
 

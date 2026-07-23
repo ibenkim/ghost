@@ -4,6 +4,7 @@ import type { RunStep } from '../../state/types'
 import AppChip from '../shared/AppChip'
 import RunCard from '../shared/RunCard'
 import { PauseButton, ChevronDown } from '../GhostPill'
+import { useWindowDrag } from '../../hooks/useWindowDrag'
 
 /**
  * 6.2 — running expanded: flat single-workflow ledger mirroring the editor.
@@ -29,6 +30,7 @@ export default function RunningPanel() {
     permissionHold,
     fixPermission
   } = useWorkflow()
+  const { onMouseDown: onDragMouseDown } = useWindowDrag()
 
   const holdSuffix = permissionHold
     ? ' · needs permission'
@@ -44,7 +46,7 @@ export default function RunningPanel() {
         hasQuestionHold || permissionHold ? 'running-panel-amber' : ''
       }`}
     >
-      <div className="ledger-header">
+      <div className="ledger-header" onMouseDown={onDragMouseDown}>
         <PauseButton paused={runPaused} onToggle={toggleRunPause} />
         <span className="ledger-title">
           {workflow.name}{' '}
@@ -54,7 +56,12 @@ export default function RunningPanel() {
           </span>
         </span>
         <span className="ledger-time">{runElapsedLabel}</span>
-        <button className="chevron-btn" onClick={() => setRunCollapsed(true)} title="Collapse">
+        <button
+          className="chevron-btn"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setRunCollapsed(true)}
+          title="Collapse"
+        >
           <ChevronDown />
         </button>
       </div>

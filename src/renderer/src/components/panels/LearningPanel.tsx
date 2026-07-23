@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useWorkflow } from '../../state/WorkflowContext'
 import { PauseButton, ChevronDown } from '../GhostPill'
 import MicIcon from '../ui/MicIcon'
+import { useWindowDrag } from '../../hooks/useWindowDrag'
 
 /**
  * 3.2 — expanded recording ledger. Header: [pause] · "Learning Workflow" ·
@@ -19,6 +20,7 @@ export default function LearningPanel() {
   } = useWorkflow()
   const [openVoiceIdx, setOpenVoiceIdx] = useState<number | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
+  const { onMouseDown: onDragMouseDown } = useWindowDrag()
 
   // New steps append without stealing focus, but keep the latest in view.
   useEffect(() => {
@@ -27,11 +29,16 @@ export default function LearningPanel() {
 
   return (
     <div className="ledger-panel">
-      <div className="ledger-header">
+      <div className="ledger-header" onMouseDown={onDragMouseDown}>
         <PauseButton paused={recordPaused} onToggle={toggleRecordPause} />
         <span className="ledger-title">Learning Workflow</span>
         <span className="ledger-time">{elapsedLabel}</span>
-        <button className="chevron-btn" onClick={() => setWatchExpanded(false)} title="Collapse">
+        <button
+          className="chevron-btn"
+          onClick={() => setWatchExpanded(false)}
+          onMouseDown={(e) => e.stopPropagation()}
+          title="Collapse"
+        >
           <ChevronDown />
         </button>
       </div>

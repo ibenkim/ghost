@@ -4,25 +4,27 @@ import { hoursReturnedThisMonth } from '../../../shared/runFormat'
 import type {
   ActivityEntry,
   Run,
+  Session,
   StoreSnapshot,
   Suggestion,
   Team,
   Workflow,
   WorkspaceFocus
 } from '../state/types'
+import { useWorkspaceDrag } from '../hooks/useWorkspaceDrag'
 import Sidebar from './Sidebar'
 import WorkflowsHome from './WorkflowsHome'
 import WorkflowDetail from './WorkflowDetail'
 import ActivityView from './ActivityView'
 import ManageView from './ManageView'
 
-export type WorkspaceNav = 'workflows' | 'activity' | 'manage'
+export type WorkspaceNav = 'workflows' | 'activity' | 'shared' | 'teams'
 
 export type Space = string
 
 /**
- * Shared Workspace shell — employee baseline plus owner Manage + header metric.
- * Desktop pill mutations broadcast via `store:changed` keep this in sync.
+ * Shared Workspace shell — employee + owner use the same surfaces.
+ * Teams/Shared are role-gated where needed; pill mutations sync via store.
  */
 export default function WorkspaceApp() {
   const [nav, setNav] = useState<WorkspaceNav>('workflows')
@@ -36,7 +38,9 @@ export default function WorkspaceApp() {
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [team, setTeam] = useState<Team>(null)
+  const [session, setSession] = useState<Session>(null)
   const [ready, setReady] = useState(false)
+  const { onMouseDown: onDragMouseDown } = useWorkspaceDrag()
 
   function applySnapshot(snap: StoreSnapshot) {
     setWorkflows(snap.workflows)
@@ -44,6 +48,7 @@ export default function WorkspaceApp() {
     setSuggestion(snap.suggestion)
     setActivity(snap.activity)
     setTeam(snap.team)
+    setSession(snap.session)
     setReady(true)
   }
 
@@ -90,12 +95,12 @@ export default function WorkspaceApp() {
     }
   }, [])
 
-  // If role drops below owner while on Manage, bounce home.
+  // Teams / Shared require a team — bounce home if the team drops away.
   useEffect(() => {
-    if (nav === 'manage' && team?.role !== 'owner') {
+    if ((nav === 'teams' || nav === 'shared') && !team) {
       setNav('workflows')
     }
-  }, [nav, team?.role])
+  }, [nav, team])
 
   const isOwner = team?.role === 'owner'
   const teamSpaceName = team?.name ?? "Harry's team"
@@ -111,6 +116,7 @@ export default function WorkspaceApp() {
   const spaceWorkflows = inPersonal ? workflows : []
   const spaceActivity = inPersonal ? activity : []
   const spaceRuns = inPersonal ? runs : []
+  const sharedWorkflows = workflows.filter((w) => w.scope === 'team')
 
   const detail = detailId ? workflows.find((w) => w.id === detailId) ?? null : null
 
@@ -122,6 +128,19 @@ export default function WorkspaceApp() {
     const current = workflows.find((w) => w.id === id)
     if (!current) return
     await persistWorkflow(updater(current))
+  }
+
+  async function shareWorkflowToTeam(id: string) {
+    if (!team) return
+    const self = team.members.find((m) => m.isSelf)
+    const sharedBy = self?.id ?? session?.email ?? 'self'
+    const sharedByName = session?.displayName ?? self?.name ?? 'You'
+    await updateWorkflow(id, (w) => ({
+      ...w,
+      scope: 'team',
+      sharedBy,
+      sharedByName
+    }))
   }
 
   async function skipOccurrence(entryId: string) {
@@ -143,6 +162,9 @@ export default function WorkspaceApp() {
       status: 'off',
       runCount: 0,
       hoursReturned: '≈ 0 h returned total',
+      scope: 'personal',
+      sharedBy: undefined,
+      sharedByName: undefined,
       steps: source.steps.map((s) => ({
         ...s,
         id: newId('s'),
@@ -165,84 +187,112 @@ export default function WorkspaceApp() {
   }
 
   if (!ready) {
-    return <div className="workspace-window" />
+    return (
+      <div className="workspace-shell">
+        <div className="workspace-window" />
+      </div>
+    )
   }
 
   return (
-    <div className="workspace-window">
-      <div className="ws-drag-strip" aria-hidden="true" />
-      <Sidebar
-        nav={nav}
-        onNav={(n) => {
-          setNav(n)
-          setDetailId(null)
-          setFocusRunId(null)
-          setEditStepId(null)
-        }}
-        space={space}
-        onSpace={setSpace}
-        team={team}
-        isOwner={isOwner}
-      />
-      <div className="workspace-content">
-        {detail ? (
-          <WorkflowDetail
-            workflow={detail}
-            runs={spaceRuns.filter((r) => r.workflowId === detail.id)}
-            initialRunId={focusRunId}
-            initialEditStepId={editStepId}
-            onBack={() => {
-              setDetailId(null)
-              setFocusRunId(null)
-              setEditStepId(null)
-            }}
-            onUpdate={(updater) => updateWorkflow(detail.id, updater)}
-            onDuplicate={() => duplicateWorkflow(detail.id)}
-            onDelete={() => deleteWorkflow(detail.id)}
-            onOpenActivity={() => {
-              setDetailId(null)
-              setFocusRunId(null)
-              setNav('activity')
-            }}
-            onFixStep={(stepId) => {
-              setFocusRunId(null)
-              setEditStepId(stepId)
-            }}
-          />
-        ) : nav === 'manage' && team && isOwner ? (
-          <ManageView team={team} />
-        ) : nav === 'workflows' ? (
-          <WorkflowsHome
-            workflows={spaceWorkflows}
-            hoursLine={hoursReturnedThisMonth(spaceRuns)}
-            suggestion={inPersonal ? suggestion : null}
-            ownerTeamSize={isOwner ? team?.memberCount : undefined}
-            onOpen={(id) => {
-              setDetailId(id)
-              setFocusRunId(null)
-            }}
-            onToggleStatus={(id) =>
-              updateWorkflow(id, (w) => ({ ...w, status: w.status === 'on' ? 'off' : 'on' }))
-            }
-            onDiscardSuggestion={discardSuggestion}
-          />
-        ) : (
-          <ActivityView
-            entries={spaceActivity}
-            onOpenWorkflow={(id) => {
-              setNav('workflows')
-              setDetailId(id)
-              setFocusRunId(null)
-            }}
-            onOpenRun={(workflowId, runId) => {
-              setNav('workflows')
-              setDetailId(workflowId)
-              setFocusRunId(runId)
-            }}
-            onSkip={skipOccurrence}
-            onAnswerHold={() => window.ghostBridge?.revealRunning?.()}
-          />
-        )}
+    <div className="workspace-shell">
+      <div className="workspace-window">
+        <div
+          className="ws-drag-strip"
+          aria-hidden="true"
+          onMouseDown={onDragMouseDown}
+        />
+        <Sidebar
+          nav={nav}
+          onNav={(n) => {
+            setNav(n)
+            setDetailId(null)
+            setFocusRunId(null)
+            setEditStepId(null)
+          }}
+          space={space}
+          onSpace={setSpace}
+          team={team}
+          isOwner={isOwner}
+        />
+        <div className="workspace-content">
+          {detail ? (
+            <WorkflowDetail
+              workflow={detail}
+              runs={spaceRuns.filter((r) => r.workflowId === detail.id)}
+              initialRunId={focusRunId}
+              initialEditStepId={editStepId}
+              onBack={() => {
+                setDetailId(null)
+                setFocusRunId(null)
+                setEditStepId(null)
+              }}
+              onUpdate={(updater) => updateWorkflow(detail.id, updater)}
+              onDuplicate={() => duplicateWorkflow(detail.id)}
+              onDelete={() => deleteWorkflow(detail.id)}
+              onOpenActivity={() => {
+                setDetailId(null)
+                setFocusRunId(null)
+                setNav('activity')
+              }}
+              onFixStep={(stepId) => {
+                setFocusRunId(null)
+                setEditStepId(stepId)
+              }}
+              onShareToTeam={
+                team ? () => void shareWorkflowToTeam(detail.id) : undefined
+              }
+            />
+          ) : nav === 'teams' && team ? (
+            <ManageView team={team} canManage={isOwner} />
+          ) : nav === 'shared' ? (
+            <WorkflowsHome
+              workflows={sharedWorkflows}
+              hoursLine={hoursReturnedThisMonth(runs)}
+              suggestion={null}
+              variant="shared"
+              onOpen={(id) => {
+                setDetailId(id)
+                setFocusRunId(null)
+              }}
+              onToggleStatus={(id) =>
+                updateWorkflow(id, (w) => ({ ...w, status: w.status === 'on' ? 'off' : 'on' }))
+              }
+              onDiscardSuggestion={discardSuggestion}
+            />
+          ) : nav === 'workflows' ? (
+            <WorkflowsHome
+              workflows={spaceWorkflows}
+              hoursLine={hoursReturnedThisMonth(spaceRuns)}
+              suggestion={inPersonal ? suggestion : null}
+              ownerTeamSize={isOwner ? team?.memberCount : undefined}
+              onOpen={(id) => {
+                setDetailId(id)
+                setFocusRunId(null)
+              }}
+              onToggleStatus={(id) =>
+                updateWorkflow(id, (w) => ({ ...w, status: w.status === 'on' ? 'off' : 'on' }))
+              }
+              onDiscardSuggestion={discardSuggestion}
+            />
+          ) : (
+            <ActivityView
+              entries={spaceActivity}
+              onOpenWorkflow={(id) => {
+                setNav('workflows')
+                setDetailId(id)
+                setFocusRunId(null)
+              }}
+              onOpenRun={(workflowId, runId) => {
+                setNav('workflows')
+                setDetailId(workflowId)
+                setFocusRunId(runId)
+              }}
+              onSkip={skipOccurrence}
+              onAnswerHold={() => window.ghostBridge?.revealRunning?.()}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

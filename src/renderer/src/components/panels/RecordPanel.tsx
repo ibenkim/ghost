@@ -3,6 +3,7 @@ import { MOCK_APPS } from '../../state/mockData'
 import MicIcon from '../ui/MicIcon'
 import Toggle from '../ui/Toggle'
 import type { RecordMode } from '../../state/types'
+import { useWindowDrag } from '../../hooks/useWindowDrag'
 
 /** 02 — "Record a workflow" glass panel; Start Recording lives here. */
 export default function RecordPanel() {
@@ -18,6 +19,7 @@ export default function RecordPanel() {
     micGranted,
     openScreenRecovery
   } = useWorkflow()
+  const { onMouseDown: onDragMouseDown } = useWindowDrag()
 
   const modes: { value: RecordMode; label: string }[] = [
     { value: 'one-app', label: 'One app' },
@@ -26,65 +28,69 @@ export default function RecordPanel() {
 
   return (
     <div className="glass-card record-panel glass-stroke glass-stroke-panel">
-        <div className="record-header">Record a workflow</div>
+      <div className="record-header" onMouseDown={onDragMouseDown}>
+        Record a workflow
+      </div>
 
-        <div className="segmented">
-          {modes.map((m) => (
-            <button
-              key={m.value}
-              className={`segment ${recordMode === m.value ? 'segment-active' : ''}`}
-              onClick={() => setRecordMode(m.value)}
-            >
-              {m.label}
-            </button>
-          ))}
+      <div className="segmented">
+        {modes.map((m) => (
+          <button
+            key={m.value}
+            className={`segment ${recordMode === m.value ? 'segment-active' : ''}`}
+            onClick={() => setRecordMode(m.value)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {recordMode === 'one-app' ? (
+        <div className="app-list">
+          {MOCK_APPS.map((app) => {
+            const selected = app.id === selectedAppId
+            return (
+              <button
+                key={app.id}
+                className={`app-row ${selected ? 'app-row-selected' : ''}`}
+                onClick={() => setSelectedAppId(app.id)}
+              >
+                <span className="app-icon" />
+                <span className="app-name">{app.name}</span>
+                <span className="app-detail">{app.detail}</span>
+                <span className={`radio ${selected ? 'radio-on' : ''}`} />
+              </button>
+            )
+          })}
         </div>
-
-        {recordMode === 'one-app' ? (
-          <div className="app-list">
-            {MOCK_APPS.map((app) => {
-              const selected = app.id === selectedAppId
-              return (
-                <button
-                  key={app.id}
-                  className={`app-row ${selected ? 'app-row-selected' : ''}`}
-                  onClick={() => setSelectedAppId(app.id)}
-                >
-                  <span className="app-icon" />
-                  <span className="app-name">{app.name}</span>
-                  <span className="app-detail">{app.detail}</span>
-                  <span className={`radio ${selected ? 'radio-on' : ''}`} />
-                </button>
-              )
-            })}
+      ) : (
+        <div className="desktop-preview">
+          <div className="desktop-preview-inner">
+            <span className="desktop-taskbar" />
+            <span className="desktop-folder" />
+            <span className="desktop-folder" />
+            <span className="desktop-folder" />
           </div>
+        </div>
+      )}
+
+      <div className="narrate-row">
+        <div className="narrate-label">
+          <MicIcon size={11} />
+          <span>
+            {micGranted ? 'Narrate while recording' : 'mic is off — turn on in Settings'}
+          </span>
+        </div>
+        {micGranted ? (
+          <Toggle checked={narrate} onChange={setNarrate} />
         ) : (
-          <div className="desktop-preview">
-            <div className="desktop-preview-inner">
-              <span className="desktop-taskbar" />
-              <span className="desktop-folder" />
-              <span className="desktop-folder" />
-              <span className="desktop-folder" />
-            </div>
-          </div>
+          <button
+            className="narrate-settings"
+            onClick={() => window.ghostBridge?.openPermissionSettings?.('microphone')}
+          >
+            Settings
+          </button>
         )}
-
-        <div className="narrate-row">
-          <div className="narrate-label">
-            <MicIcon size={11} />
-            <span>{micGranted ? 'Narrate while recording' : 'mic is off — turn on in Settings'}</span>
-          </div>
-          {micGranted ? (
-            <Toggle checked={narrate} onChange={setNarrate} />
-          ) : (
-            <button
-              className="btn-text btn-text-sm"
-              onClick={() => window.ghostBridge?.openPermissionSettings?.('microphone')}
-            >
-              Settings
-            </button>
-          )}
-        </div>
+      </div>
 
       <button
         className="start-recording-btn"

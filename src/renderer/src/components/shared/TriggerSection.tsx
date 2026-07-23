@@ -301,7 +301,15 @@ function TimeInput({
 
 function ChevronRight() {
   return (
-    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg
+      className="trigger-chevron"
+      width="9"
+      height="9"
+      viewBox="0 0 9 9"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+    >
       <path d="M3 1.5 6.5 4.5 3 7.5" />
     </svg>
   )

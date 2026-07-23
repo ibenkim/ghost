@@ -9,6 +9,7 @@ import {
 import type { QuestionReceipt, Run, RunStepResult, Workflow } from '../state/types'
 import TriggerSection from '../components/shared/TriggerSection'
 import StepList from '../components/shared/StepList'
+import { useWorkspaceDrag } from '../hooks/useWorkspaceDrag'
 
 type Tab = 'overview' | 'log'
 
@@ -26,7 +27,8 @@ export default function WorkflowDetail({
   onDuplicate,
   onDelete,
   onOpenActivity,
-  onFixStep
+  onFixStep,
+  onShareToTeam
 }: {
   workflow: Workflow
   runs: Run[]
@@ -38,6 +40,8 @@ export default function WorkflowDetail({
   onDelete: () => void
   onOpenActivity: () => void
   onFixStep: (stepId: string) => void
+  /** When set (team present), shows Share to Team beside Run / ⋯. */
+  onShareToTeam?: () => void
 }) {
   const [tab, setTab] = useState<Tab>(initialRunId ? 'log' : 'overview')
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunId ?? null)
@@ -48,6 +52,7 @@ export default function WorkflowDetail({
   const [alwaysOffer, setAlwaysOffer] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const renameRef = useRef<HTMLInputElement>(null)
+  const { onMouseDown: onDragMouseDown } = useWorkspaceDrag()
 
   useEffect(() => {
     if (initialRunId) {
@@ -134,9 +139,14 @@ export default function WorkflowDetail({
 
   return (
     <div className="ws-view">
-      <div className="ws-header">
+      <div className="ws-header" onMouseDown={onDragMouseDown}>
         <div className="ws-detail-head">
-          <button className="back-btn" onClick={onBack} title="Back">
+          <button
+            className="back-btn"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={onBack}
+            title="Back"
+          >
             <BackChevron />
           </button>
           <div>
@@ -147,6 +157,7 @@ export default function WorkflowDetail({
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}
                 onBlur={commitRename}
+                onMouseDown={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitRename()
                   if (e.key === 'Escape') {
@@ -167,13 +178,28 @@ export default function WorkflowDetail({
         <div className="ws-detail-actions" ref={menuRef}>
           <button
             className="btn-small-outline"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => window.ghostBridge?.runWorkflow?.(workflow.id)}
           >
             Run
           </button>
+          {onShareToTeam && (
+            <button
+              className="btn-small-outline"
+              disabled={workflow.scope === 'team'}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                if (workflow.scope === 'team') return
+                onShareToTeam()
+              }}
+            >
+              {workflow.scope === 'team' ? 'Shared' : 'Share to Team'}
+            </button>
+          )}
           <button
             className="overflow-btn"
             title="More"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setMenuOpen((o) => !o)}
           >
             <OverflowDots />

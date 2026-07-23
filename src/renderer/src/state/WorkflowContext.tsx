@@ -88,6 +88,7 @@ type WorkflowContextValue = {
   endDrag: () => void
   // running
   runSteps: RunStep[]
+  setRunSteps: Dispatch<SetStateAction<RunStep[]>>
   runPaused: boolean
   runCollapsed: boolean
   setRunCollapsed: (v: boolean) => void
@@ -199,9 +200,13 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [recordPaused, setRecordPaused] = useState(false)
   const [watchLog, setWatchLog] = useState<WatchEntry[]>([])
   const [watchExpanded, setWatchExpanded] = useState(false)
+  const watchExpandedRef = useRef(watchExpanded)
+  watchExpandedRef.current = watchExpanded
 
   const [workflow, setWorkflow] = useState<Workflow>(() => createMockDraft(newId('draft')))
   const [editorCollapsed, setEditorCollapsed] = useState(false)
+  const editorCollapsedRef = useRef(editorCollapsed)
+  editorCollapsedRef.current = editorCollapsed
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
 
   const [panelPlacement, setPanelPlacement] = useState<'above' | 'below'>('above')
@@ -226,6 +231,8 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   runStepsRef.current = runSteps
   const [runPaused, setRunPaused] = useState(false)
   const [runCollapsed, setRunCollapsed] = useState(false)
+  const runCollapsedRef = useRef(runCollapsed)
+  runCollapsedRef.current = runCollapsed
   const [runElapsed, setRunElapsed] = useState(0)
   const runElapsedRef = useRef(0)
   runElapsedRef.current = runElapsed
@@ -384,9 +391,10 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     window.ghostBridge?.setPillAppState?.(state)
   }, [state])
 
-  // ── Editor ink-20 scrim ──
+  // ── Editor / summary ink-20 scrim (main hides it when pill is not frontmost) ──
   useEffect(() => {
-    const show = state === 'editor' && !editorCollapsed
+    const show =
+      (state === 'editor' && !editorCollapsed) || state === 'summary'
     window.ghostBridge?.setEditorScrim?.(show)
     return () => {
       window.ghostBridge?.setEditorScrim?.(false)
@@ -782,21 +790,32 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     pendingHoverHRef.current = null
     setHoverDismissMode('morph')
     setHoverFading(true)
-    window.ghostBridge?.setBounds?.(94, 24, 'pill', {
-      durationMs: 400,
-      pillDrive: true
-    })
-    setTimeout(() => {
-      setHoverFading(false)
-      setHoverDismissMode(null)
-      hoverClosingRef.current = false
-      setState((s) => (s === 'hover' ? 'idle' : s))
-    }, 400)
+    // Stay in glass CSS until bounds finish — idle + width:100% mid-anim
+    // was stretching the pill to the shrinking window (pillW≠94).
+    void window.ghostBridge
+      ?.setBounds?.(94, 24, 'pill', {
+        durationMs: 400,
+        pillDrive: true
+      })
+      ?.then(() => {
+        setHoverFading(false)
+        setHoverDismissMode(null)
+        hoverClosingRef.current = false
+        setState((s) => (s === 'hover' ? 'idle' : s))
+      })
   }, [])
 
   const beginDrag = useCallback((): { collapseToPill: boolean } => {
     draggingRef.current = true
-    return { collapseToPill: stateRef.current !== 'hover' }
+    // Keep expanded chrome open while dragging hover / record / editor / run / summary.
+    const s = stateRef.current
+    const keepOpen =
+      s === 'hover' ||
+      (s === 'recording' && watchExpandedRef.current) ||
+      (s === 'editor' && !editorCollapsedRef.current) ||
+      (s === 'running' && !runCollapsedRef.current) ||
+      s === 'summary'
+    return { collapseToPill: !keepOpen }
   }, [])
 
   const endDrag = useCallback(() => {
@@ -971,6 +990,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     beginDrag,
     endDrag,
     runSteps,
+    setRunSteps,
     runPaused,
     runCollapsed,
     setRunCollapsed,

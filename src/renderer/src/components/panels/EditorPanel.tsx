@@ -3,6 +3,7 @@ import { useWorkflow } from '../../state/WorkflowContext'
 import TriggerSection, { PencilIcon } from '../shared/TriggerSection'
 import StepList from '../shared/StepList'
 import { ChevronDown } from '../GhostPill'
+import { useWindowDrag } from '../../hooks/useWindowDrag'
 
 /**
  * 05 — editor, 660×521 white panel. Header · TRIGGER · STEPS · footer
@@ -21,6 +22,7 @@ export default function EditorPanel() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const { onMouseDown: onDragMouseDown } = useWindowDrag()
 
   // Esc → collapse (not discard).
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function EditorPanel() {
       <div className="editor-chrome">
         <button
           className="editor-close"
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setConfirmDiscard(true)}
           title="Cancel"
         >
@@ -60,6 +63,7 @@ export default function EditorPanel() {
         </button>
         <button
           className="chevron-btn editor-collapse"
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setEditorCollapsed(true)}
           title="Collapse"
         >
@@ -67,7 +71,7 @@ export default function EditorPanel() {
         </button>
       </div>
 
-      <div className="editor-head">
+      <div className="editor-head" onMouseDown={onDragMouseDown}>
         <div className="eyebrow">Here's what I learned</div>
         <div className="editor-title-row">
           {editingTitle ? (
@@ -78,17 +82,26 @@ export default function EditorPanel() {
               size={Math.max(titleDraft.length, 4)}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={commitTitle}
+              onMouseDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commitTitle()
                 if (e.key === 'Escape') setEditingTitle(false)
               }}
             />
           ) : (
-            <button className="editor-title" onClick={beginTitleEdit}>
+            <button
+              className="editor-title"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={beginTitleEdit}
+            >
               {workflow.name}
             </button>
           )}
-          <span className="editor-edit-icon" onClick={beginTitleEdit}>
+          <span
+            className="editor-edit-icon"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={beginTitleEdit}
+          >
             <PencilIcon />
           </span>
         </div>

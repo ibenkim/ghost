@@ -22,6 +22,7 @@ export default function Sidebar({
   const menuRef = useRef<HTMLDivElement>(null)
   const teamName = team?.name ?? "Harry's team"
   const spaces: Space[] = ['Personal', teamName]
+  const hasTeam = Boolean(team)
 
   // Press anywhere outside to dismiss the team menu.
   useEffect(() => {
@@ -45,11 +46,13 @@ export default function Sidebar({
       <div className="traffic-lights">
         <button
           className="light light-close"
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => window.ghostBridge?.closeWindow?.()}
           title="Close"
         />
         <button
           className="light light-min"
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => window.ghostBridge?.minimizeWindow?.()}
           title="Minimize"
         />
@@ -105,13 +108,21 @@ export default function Sidebar({
         >
           Activity
         </button>
-        {isOwner && (
-          <button
-            className={`ws-nav-item ${nav === 'manage' ? 'ws-nav-active' : ''}`}
-            onClick={() => onNav('manage')}
-          >
-            Manage
-          </button>
+        {hasTeam && (
+          <>
+            <button
+              className={`ws-nav-item ${nav === 'shared' ? 'ws-nav-active' : ''}`}
+              onClick={() => onNav('shared')}
+            >
+              Shared
+            </button>
+            <button
+              className={`ws-nav-item ${nav === 'teams' ? 'ws-nav-active' : ''}`}
+              onClick={() => onNav('teams')}
+            >
+              Teams
+            </button>
+          </>
         )}
       </nav>
     </aside>
